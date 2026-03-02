@@ -10,6 +10,11 @@
   },
   "homepage": "https://github.com/planetai87/pulse/tree/main/pulse-clawhub",
   "keywords": ["openclaw", "clawhub", "megaeth", "ai-agent", "commerce", "escrow"],
+  "files": [
+    "dist",
+    "SKILL.md",
+    "README.md"
+  ],
   "bin": {
     "pulse": "./dist/pulse.js"
   },

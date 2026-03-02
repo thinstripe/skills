@@ -81,13 +81,57 @@ import { DEFAULT_SCHEMAS, IndexerClient, ServiceType, formatUsdm } from "@pulsea
 // src/config.ts
 import { createMainnetClient } from "@pulseai/sdk";
 import { privateKeyToAccount } from "viem/accounts";
+import fs from "fs";
+import os from "os";
+import path from "path";
+var CONFIG_PATH = path.join(os.homedir(), ".pulse", "config.json");
 var _client;
+function loadConfig() {
+  try {
+    if (!fs.existsSync(CONFIG_PATH)) {
+      return {};
+    }
+    const raw = fs.readFileSync(CONFIG_PATH, "utf8").trim();
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+    const privateKey = parsed.privateKey;
+    if (typeof privateKey !== "string" || !privateKey) {
+      return {};
+    }
+    return { privateKey };
+  } catch (e) {
+    throw new Error(
+      `Failed to load Pulse config from ${CONFIG_PATH}: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+}
+function saveConfig(config) {
+  try {
+    fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", "utf8");
+  } catch (e) {
+    throw new Error(
+      `Failed to save Pulse config to ${CONFIG_PATH}: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+}
+function getPrivateKey() {
+  if (process.env.PULSE_PRIVATE_KEY) {
+    return process.env.PULSE_PRIVATE_KEY;
+  }
+  return loadConfig().privateKey;
+}
 function getClient() {
   if (_client) return _client;
-  const key = process.env.PULSE_PRIVATE_KEY;
+  const key = getPrivateKey();
   if (!key) {
     throw new Error(
-      "PULSE_PRIVATE_KEY is required. Set it as an environment variable.\nExample: export PULSE_PRIVATE_KEY=0xabc123..."
+      "No wallet private key found. Set PULSE_PRIVATE_KEY or run `pulse wallet generate`.\nConfig fallback path: ~/.pulse/config.json"
     );
   }
   const account = privateKeyToAccount(key);
@@ -96,7 +140,7 @@ function getClient() {
 }
 function getReadClient() {
   if (_client) return _client;
-  const key = process.env.PULSE_PRIVATE_KEY;
+  const key = getPrivateKey();
   if (key) {
     return getClient();
   }
@@ -104,8 +148,10 @@ function getReadClient() {
   return _client;
 }
 function getAddress() {
-  const key = process.env.PULSE_PRIVATE_KEY;
-  if (!key) throw new Error("PULSE_PRIVATE_KEY is required");
+  const key = getPrivateKey();
+  if (!key) {
+    throw new Error("No wallet private key found. Set PULSE_PRIVATE_KEY or run `pulse wallet generate`.");
+  }
   return privateKeyToAccount(key).address;
 }
 
@@ -199,7 +245,7 @@ function parseServiceType(val) {
 
 // src/commands/agent.ts
 import { Command as Command2 } from "commander";
-import { registerAgent, initAgent, getAgent, IndexerClient as IndexerClient2 } from "@pulseai/sdk";
+import { registerAgent, initAgent, getAgent, setOperator, IndexerClient as IndexerClient2 } from "@pulseai/sdk";
 var agentCommand = new Command2("agent").description("Agent registration and info");
 agentCommand.command("register").description("Register a new agent and initialize it in Pulse").option("--name <name>", "Agent name (used as URI)", "pulse-agent").option("--json", "Output as JSON").action(async (opts) => {
   try {
@@ -250,6 +296,17 @@ agentCommand.command("info").description("Get agent information").argument("<age
     error(e instanceof Error ? e.message : String(e));
   }
 });
+agentCommand.command("set-operator").description("Set operator for an agent (owner only)").requiredOption("--agent-id <id>", "Agent ID").requiredOption("--operator <address>", "Operator address").option("--json", "Output as JSON").action(async (opts) => {
+  try {
+    const client = getClient();
+    info("Setting operator...");
+    const txHash = await setOperator(client, BigInt(opts.agentId), opts.operator);
+    output({ agentId: opts.agentId, operator: opts.operator, txHash });
+    success("Operator updated");
+  } catch (e) {
+    error(e instanceof Error ? e.message : String(e));
+  }
+});
 
 // src/commands/job.ts
 import { Command as Command3 } from "commander";
@@ -265,6 +322,8 @@ import {
   getOffering,
   createJobTerms,
   deployRequirements,
+  deployDeliverable,
+  readRequirements,
   readDeliverable,
   IndexerClient as IndexerClient3,
   formatUsdm as formatUsdm2,
@@ -398,12 +457,77 @@ jobCommand.command("accept").description("Accept a job as provider").argument("<
     error(e instanceof Error ? e.message : String(e));
   }
 });
-jobCommand.command("deliver").description("Submit a deliverable for a job").argument("<jobId>", "Job ID").requiredOption("--hash <hex>", "Deliverable hash (bytes32)").option("--json", "Output as JSON").action(async (jobIdStr, opts) => {
+jobCommand.command("deliver").description("Submit a deliverable for a job").argument("<jobId>", "Job ID").option("--hash <hex>", "Deliverable hash (bytes32) \u2014 legacy mode").option("--content <json>", "Deliverable content as JSON string").option("--file <path>", "Path to deliverable JSON file").option("--agent-id <id>", "Provider agent ID").option("--json", "Output as JSON").action(async (jobIdStr, opts) => {
   try {
     const client = getClient();
-    const txHash = await submitDeliverable(client, BigInt(jobIdStr), opts.hash);
-    output({ jobId: jobIdStr, txHash });
-    success(`Deliverable submitted for job ${jobIdStr}`);
+    const jobId = BigInt(jobIdStr);
+    if (opts.hash && (opts.content || opts.file)) {
+      error("Cannot combine --hash with --content/--file");
+    }
+    if (opts.hash && !opts.content && !opts.file) {
+      const txHash = await submitDeliverable(client, jobId, opts.hash);
+      output({ jobId: jobIdStr, txHash });
+      success("Deliverable submitted");
+      return;
+    }
+    if (opts.content && opts.file) {
+      error("Cannot use both --content and --file");
+    }
+    if (!opts.content && !opts.file) {
+      error("Must specify --hash, --content, or --file");
+    }
+    if (!opts.agentId) {
+      error("--agent-id is required when using --content or --file");
+    }
+    const agentId = Number(opts.agentId);
+    if (!Number.isFinite(agentId) || !Number.isInteger(agentId) || agentId <= 0) {
+      error("Invalid --agent-id (must be a positive integer)");
+    }
+    let contentStr;
+    if (opts.content) {
+      contentStr = opts.content;
+    } else {
+      const fs2 = await import("fs");
+      contentStr = fs2.readFileSync(opts.file, "utf8");
+    }
+    info("Running preflight checks...");
+    const indexer = new IndexerClient3({ baseUrl: client.indexerUrl });
+    const job = await indexer.getJob(Number(jobIdStr));
+    if (job.status !== 2) {
+      error(
+        `Job is not InProgress (status=${STATUS_NAMES[job.status] ?? String(job.status)}). Cannot deliver.`
+      );
+    }
+    if (job.providerAgentId !== agentId) {
+      error(`You are not the provider for this job (provider agent: ${job.providerAgentId})`);
+    }
+    if (job.acceptedAt && job.slaMinutes) {
+      const deadlineMs = (job.acceptedAt + job.slaMinutes * 60) * 1e3;
+      const remainingMs = deadlineMs - Date.now();
+      if (remainingMs < 10 * 60 * 1e3) {
+        info("Warning: less than 10 minutes remaining on SLA deadline");
+      }
+    }
+    info("Deploying deliverable to WARREN + on-chain...");
+    const result = await deployDeliverable(
+      client,
+      BigInt(agentId),
+      jobId,
+      {
+        jobId,
+        type: "inline",
+        content: contentStr,
+        mimeType: "application/json"
+      },
+      client.indexerUrl
+    );
+    output({
+      jobId: jobIdStr,
+      hash: result.hash,
+      masterAddress: result.masterAddress,
+      txHash: result.txHash
+    });
+    success("Deliverable deployed and submitted");
   } catch (e) {
     error(e instanceof Error ? e.message : String(e));
   }
@@ -480,6 +604,79 @@ jobCommand.command("cancel").description("Cancel a job").argument("<jobId>", "Jo
     const txHash = await cancelJob(client, BigInt(jobIdStr));
     output({ jobId: jobIdStr, txHash });
     success(`Job ${jobIdStr} cancelled`);
+  } catch (e) {
+    error(e instanceof Error ? e.message : String(e));
+  }
+});
+jobCommand.command("pending").description("List pending jobs for a provider agent").requiredOption("--agent-id <id>", "Provider agent ID").option("--json", "Output as JSON").action(async (opts) => {
+  try {
+    const client = getReadClient();
+    const indexer = new IndexerClient3({ baseUrl: client.indexerUrl });
+    const agentId = Number(opts.agentId);
+    if (!Number.isFinite(agentId) || !Number.isInteger(agentId) || agentId <= 0) {
+      error("Invalid --agent-id (must be a positive integer)");
+    }
+    info("Fetching pending jobs...");
+    const jobs = await indexer.getJobs({ status: 0, agentId });
+    const pendingJobs = jobs.filter((job) => job.providerAgentId === agentId);
+    if (pendingJobs.length === 0) {
+      info("No pending jobs found.");
+      output([]);
+      return;
+    }
+    output(
+      pendingJobs.map((job) => ({
+        jobId: job.jobId,
+        offeringId: job.offeringId,
+        buyerAgentId: job.buyerAgentId,
+        price: formatUsdm2(BigInt(job.priceUsdm)) + " USDm",
+        slaMinutes: job.slaMinutes,
+        createdAt: job.createdAt ? new Date(job.createdAt * 1e3).toISOString() : null
+      }))
+    );
+    success(`${pendingJobs.length} pending job(s) found`);
+  } catch (e) {
+    error(e instanceof Error ? e.message : String(e));
+  }
+});
+jobCommand.command("requirements").description("View job requirements").argument("<jobId>", "Job ID").option("--json", "Output as JSON").action(async (jobIdStr) => {
+  try {
+    const client = getReadClient();
+    const jobId = Number(jobIdStr);
+    if (!Number.isFinite(jobId) || !Number.isInteger(jobId) || jobId < 0) {
+      error("Invalid <jobId>");
+    }
+    info("Fetching job requirements...");
+    const warrenRequirements = await readRequirements(client, BigInt(jobId), client.indexerUrl);
+    if (warrenRequirements) {
+      output(warrenRequirements);
+      success("Requirements retrieved from WARREN (verified)");
+      return;
+    }
+    const baseUrl = client.indexerUrl.replace(/\/$/, "");
+    const response = await fetch(`${baseUrl}/jobs/${jobId}`);
+    if (!response.ok) {
+      error(`Failed to fetch job from indexer: ${response.status}`);
+    }
+    const payload = await response.json();
+    const job = payload.data;
+    if (!job) {
+      error("Invalid indexer response: missing job payload");
+    }
+    const requirementsContent = job.requirements_content;
+    if (typeof requirementsContent === "string" && requirementsContent.length > 0) {
+      try {
+        const parsed = JSON.parse(requirementsContent);
+        output(parsed);
+        success("Requirements retrieved from indexer");
+        return;
+      } catch {
+        output({ raw: requirementsContent });
+        return;
+      }
+    }
+    info("No requirements found for this job.");
+    output({ jobId, requirements: null });
   } catch (e) {
     error(e instanceof Error ? e.message : String(e));
   }
@@ -699,26 +896,67 @@ function parseServiceType2(val) {
 // src/commands/wallet.ts
 import { Command as Command5 } from "commander";
 import { formatEther, erc20Abi } from "viem";
+import { generatePrivateKey, privateKeyToAccount as privateKeyToAccount2 } from "viem/accounts";
 import { formatUsdm as formatUsdm4 } from "@pulseai/sdk";
+var OPERATOR_MESSAGE = "Ask your agent owner to set you as operator: pulse agent set-operator --agent-id <ID> --operator <YOUR_ADDRESS>";
+async function showWallet() {
+  const client = getClient();
+  const address = getAddress();
+  const [ethBalance, usdmBalance] = await Promise.all([
+    client.publicClient.getBalance({ address }),
+    client.publicClient.readContract({
+      address: client.addresses.usdm,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [address]
+    })
+  ]);
+  output({
+    address,
+    network: "MegaETH Mainnet",
+    chainId: client.chain.id,
+    ethBalance: formatEther(ethBalance) + " ETH",
+    usdmBalance: formatUsdm4(usdmBalance) + " USDm"
+  });
+}
 var walletCommand = new Command5("wallet").description("Show wallet address and balances").option("--json", "Output as JSON").action(async () => {
   try {
-    const client = getClient();
-    const address = getAddress();
-    const [ethBalance, usdmBalance] = await Promise.all([
-      client.publicClient.getBalance({ address }),
-      client.publicClient.readContract({
-        address: client.addresses.usdm,
-        abi: erc20Abi,
-        functionName: "balanceOf",
-        args: [address]
-      })
-    ]);
+    await showWallet();
+  } catch (e) {
+    error(e instanceof Error ? e.message : String(e));
+  }
+});
+walletCommand.command("show").description("Show wallet address and balances").option("--json", "Output as JSON").action(async () => {
+  try {
+    await showWallet();
+  } catch (e) {
+    error(e instanceof Error ? e.message : String(e));
+  }
+});
+walletCommand.command("generate").description("Generate and save a wallet private key").option("--json", "Output as JSON").action(async () => {
+  try {
+    const config = loadConfig();
+    const existingKey = config.privateKey;
+    if (existingKey) {
+      const existingAddress = privateKeyToAccount2(existingKey).address;
+      info("Wallet key already exists at ~/.pulse/config.json");
+      output({
+        address: existingAddress,
+        ...isJsonMode() ? { privateKey: existingKey } : {},
+        message: OPERATOR_MESSAGE
+      });
+      success("Using existing wallet key.");
+      return;
+    }
+    info("Generating new wallet key...");
+    const privateKey = generatePrivateKey();
+    const account = privateKeyToAccount2(privateKey);
+    saveConfig({ privateKey });
+    success("Saved wallet key to ~/.pulse/config.json");
     output({
-      address,
-      network: "MegaETH Testnet (carrot)",
-      chainId: client.chain.id,
-      ethBalance: formatEther(ethBalance) + " ETH",
-      usdmBalance: formatUsdm4(usdmBalance) + " USDm"
+      address: account.address,
+      ...isJsonMode() ? { privateKey } : {},
+      message: OPERATOR_MESSAGE
     });
   } catch (e) {
     error(e instanceof Error ? e.message : String(e));

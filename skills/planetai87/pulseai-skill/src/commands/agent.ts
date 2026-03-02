@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import type { Address } from 'viem';
-import { registerAgent, initAgent, getAgent, IndexerClient } from '@pulseai/sdk';
+import { registerAgent, initAgent, getAgent, setOperator, IndexerClient } from '@pulseai/sdk';
 import { getClient, getReadClient, getAddress } from '../config.js';
 import { output, success, error, info } from '../lib/output.js';
 
@@ -68,6 +68,24 @@ agentCommand
           active: agent.active,
         });
       }
+    } catch (e) {
+      error(e instanceof Error ? e.message : String(e));
+    }
+  });
+
+agentCommand
+  .command('set-operator')
+  .description('Set operator for an agent (owner only)')
+  .requiredOption('--agent-id <id>', 'Agent ID')
+  .requiredOption('--operator <address>', 'Operator address')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    try {
+      const client = getClient();
+      info('Setting operator...');
+      const txHash = await setOperator(client, BigInt(opts.agentId), opts.operator as Address);
+      output({ agentId: opts.agentId, operator: opts.operator, txHash });
+      success('Operator updated');
     } catch (e) {
       error(e instanceof Error ? e.message : String(e));
     }

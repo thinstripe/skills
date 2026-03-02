@@ -12,6 +12,8 @@ import {
   getOffering,
   createJobTerms,
   deployRequirements,
+  deployDeliverable,
+  readRequirements,
   readDeliverable,
   IndexerClient,
   JobStatus,
@@ -195,14 +197,91 @@ jobCommand
   .command('deliver')
   .description('Submit a deliverable for a job')
   .argument('<jobId>', 'Job ID')
-  .requiredOption('--hash <hex>', 'Deliverable hash (bytes32)')
+  .option('--hash <hex>', 'Deliverable hash (bytes32) — legacy mode')
+  .option('--content <json>', 'Deliverable content as JSON string')
+  .option('--file <path>', 'Path to deliverable JSON file')
+  .option('--agent-id <id>', 'Provider agent ID')
   .option('--json', 'Output as JSON')
   .action(async (jobIdStr, opts) => {
     try {
       const client = getClient();
-      const txHash = await submitDeliverable(client, BigInt(jobIdStr), opts.hash as Hex);
-      output({ jobId: jobIdStr, txHash });
-      success(`Deliverable submitted for job ${jobIdStr}`);
+      const jobId = BigInt(jobIdStr);
+
+      if (opts.hash && (opts.content || opts.file)) {
+        error('Cannot combine --hash with --content/--file');
+      }
+
+      // Backward-compatible hash-only mode
+      if (opts.hash && !opts.content && !opts.file) {
+        const txHash = await submitDeliverable(client, jobId, opts.hash as Hex);
+        output({ jobId: jobIdStr, txHash });
+        success('Deliverable submitted');
+        return;
+      }
+
+      if (opts.content && opts.file) {
+        error('Cannot use both --content and --file');
+      }
+      if (!opts.content && !opts.file) {
+        error('Must specify --hash, --content, or --file');
+      }
+      if (!opts.agentId) {
+        error('--agent-id is required when using --content or --file');
+      }
+
+      const agentId = Number(opts.agentId);
+      if (!Number.isFinite(agentId) || !Number.isInteger(agentId) || agentId <= 0) {
+        error('Invalid --agent-id (must be a positive integer)');
+      }
+
+      let contentStr: string;
+      if (opts.content) {
+        contentStr = opts.content as string;
+      } else {
+        const fs = await import('node:fs');
+        contentStr = fs.readFileSync(opts.file as string, 'utf8');
+      }
+
+      info('Running preflight checks...');
+      const indexer = new IndexerClient({ baseUrl: client.indexerUrl });
+      const job = await indexer.getJob(Number(jobIdStr));
+
+      if (job.status !== 2) {
+        error(
+          `Job is not InProgress (status=${STATUS_NAMES[job.status] ?? String(job.status)}). Cannot deliver.`,
+        );
+      }
+      if (job.providerAgentId !== agentId) {
+        error(`You are not the provider for this job (provider agent: ${job.providerAgentId})`);
+      }
+
+      if (job.acceptedAt && job.slaMinutes) {
+        const deadlineMs = (job.acceptedAt + job.slaMinutes * 60) * 1000;
+        const remainingMs = deadlineMs - Date.now();
+        if (remainingMs < 10 * 60 * 1000) {
+          info('Warning: less than 10 minutes remaining on SLA deadline');
+        }
+      }
+
+      info('Submitting deliverable on-chain...');
+      const result = await deployDeliverable(
+        client,
+        jobId,
+        {
+          jobId,
+          type: 'inline',
+          content: contentStr,
+          mimeType: 'application/json',
+        },
+        client.indexerUrl,
+      );
+
+      output({
+        jobId: jobIdStr,
+        hash: result.hash,
+        txHash: result.txHash,
+      });
+      success('Deliverable submitted');
     } catch (e) {
       error(e instanceof Error ? e.message : String(e));
     }
@@ -267,10 +346,10 @@ jobCommand
       }
 
       info(`Job #${jobId} — status: ${statusName}, deliverableHash: ${job.deliverableHash}`);
-      info('Reading deliverable from WARREN...');
+      info('Reading deliverable from indexer...');
 
       try {
-        const deliverable = await readDeliverable(client, BigInt(jobId), client.indexerUrl);
+        const deliverable = await readDeliverable(BigInt(jobId), client.indexerUrl);
         output({
           jobId,
           status: statusName,
@@ -284,14 +363,13 @@ jobCommand
         });
         success(`Deliverable retrieved for job #${jobId}`);
       } catch {
-        info('WARREN content not available. Showing on-chain data only.');
+        info('Deliverable content not available in indexer. Showing on-chain data only.');
         output({
           jobId,
           status: statusName,
           deliverableHash: job.deliverableHash,
           deliveredAt: job.deliveredAt ? new Date(job.deliveredAt * 1000).toISOString() : null,
-          warren: false,
-          note: 'Deliverable hash exists on-chain but content was not deployed to WARREN.',
+          note: 'Deliverable hash exists on-chain but content was not stored in indexer.',
         });
       }
     } catch (e) {
@@ -310,6 +388,101 @@ jobCommand
       const txHash = await cancelJob(client, BigInt(jobIdStr));
       output({ jobId: jobIdStr, txHash });
       success(`Job ${jobIdStr} cancelled`);
+    } catch (e) {
+      error(e instanceof Error ? e.message : String(e));
+    }
+  });
+
+jobCommand
+  .command('pending')
+  .description('List pending jobs for a provider agent')
+  .requiredOption('--agent-id <id>', 'Provider agent ID')
+  .option('--json', 'Output as JSON')
+  .action(async (opts) => {
+    try {
+      const client = getReadClient();
+      const indexer = new IndexerClient({ baseUrl: client.indexerUrl });
+      const agentId = Number(opts.agentId);
+
+      if (!Number.isFinite(agentId) || !Number.isInteger(agentId) || agentId <= 0) {
+        error('Invalid --agent-id (must be a positive integer)');
+      }
+
+      info('Fetching pending jobs...');
+      const jobs = await indexer.getJobs({ status: 0, agentId });
+      const pendingJobs = jobs.filter((job) => job.providerAgentId === agentId);
+
+      if (pendingJobs.length === 0) {
+        info('No pending jobs found.');
+        output([]);
+        return;
+      }
+
+      output(
+        pendingJobs.map((job) => ({
+          jobId: job.jobId,
+          offeringId: job.offeringId,
+          buyerAgentId: job.buyerAgentId,
+          price: formatUsdm(BigInt(job.priceUsdm)) + ' USDm',
+          slaMinutes: job.slaMinutes,
+          createdAt: job.createdAt ? new Date(job.createdAt * 1000).toISOString() : null,
+        })),
+      );
+      success(`${pendingJobs.length} pending job(s) found`);
+    } catch (e) {
+      error(e instanceof Error ? e.message : String(e));
+    }
+  });
+
+jobCommand
+  .command('requirements')
+  .description('View job requirements')
+  .argument('<jobId>', 'Job ID')
+  .option('--json', 'Output as JSON')
+  .action(async (jobIdStr) => {
+    try {
+      const client = getReadClient();
+      const jobId = Number(jobIdStr);
+      if (!Number.isFinite(jobId) || !Number.isInteger(jobId) || jobId < 0) {
+        error('Invalid <jobId>');
+      }
+
+      info('Fetching job requirements...');
+
+      const warrenRequirements = await readRequirements(client, BigInt(jobId), client.indexerUrl);
+      if (warrenRequirements) {
+        output(warrenRequirements);
+        success('Requirements retrieved from WARREN (verified)');
+        return;
+      }
+
+      const baseUrl = client.indexerUrl.replace(/\/$/, '');
+      const response = await fetch(`${baseUrl}/jobs/${jobId}`);
+      if (!response.ok) {
+        error(`Failed to fetch job from indexer: ${response.status}`);
+      }
+
+      const payload = await response.json() as { data?: Record<string, unknown> };
+      const job = payload.data;
+      if (!job) {
+        error('Invalid indexer response: missing job payload');
+      }
+
+      const requirementsContent = job.requirements_content;
+      if (typeof requirementsContent === 'string' && requirementsContent.length > 0) {
+        try {
+          const parsed = JSON.parse(requirementsContent) as unknown;
+          output(parsed);
+          success('Requirements retrieved from indexer');
+          return;
+        } catch {
+          output({ raw: requirementsContent });
+          return;
+        }
+      }
+
+      info('No requirements found for this job.');
+      output({ jobId, requirements: null });
     } catch (e) {
       error(e instanceof Error ? e.message : String(e));
     }
