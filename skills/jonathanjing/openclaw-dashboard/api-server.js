@@ -3096,6 +3096,32 @@ function handleOpsCronModel(req, res, method) {
   }).catch(e => errorReply(res, 400, e.message));
 }
 
+// ─── POST /ops/restart ─── Proxy restart to OpenClaw gateway (no hardcoded token in client)
+function handleOpsRestart(req, res, method) {
+  if (method !== 'POST') return errorReply(res, 405, 'POST only');
+  if (!requireMutatingOps(req, res, 'ops restart')) return;
+  const http_ = require('http');
+  const postData = JSON.stringify({ action: 'restart', token: HOOK_TOKEN });
+  const gwReq = http_.request({
+    hostname: '127.0.0.1', port: 18789, path: '/hooks',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
+    timeout: 10000,
+  }, (gwRes) => {
+    let body = '';
+    gwRes.on('data', c => body += c);
+    gwRes.on('end', () => {
+      if (gwRes.statusCode >= 200 && gwRes.statusCode < 300) {
+        return jsonReply(res, 200, { ok: true, message: 'Restart signal sent.' });
+      }
+      return errorReply(res, gwRes.statusCode || 502, body || 'Gateway error');
+    });
+  });
+  gwReq.on('error', e => errorReply(res, 502, `Gateway unreachable: ${e.message}`));
+  gwReq.write(postData);
+  gwReq.end();
+}
+
 // --- Main Server ---
 const server = http.createServer((req, res) => {
   const parsed = url.parse(req.url, true);
@@ -3253,6 +3279,7 @@ button:active{opacity:.8}
     if (root === 'ops' && segments[1] === 'update-openclaw') return handleOpsUpdateOpenClaw(req, res, method);
     if (root === 'ops' && segments[1] === 'session-model') return handleOpsSessionModel(req, res, method);
     if (root === 'ops' && segments[1] === 'cron-model') return handleOpsCronModel(req, res, method);
+    if (root === 'ops' && segments[1] === 'restart') return handleOpsRestart(req, res, method);
     if (root === 'backup') return handleBackup(req, res, method, segments);
     if (root === 'memory') return handleMemory(req, res, method, parsed);
     if (root === 'metrics') return handleMetrics(req, res, method);

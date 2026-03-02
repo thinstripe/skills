@@ -19,6 +19,7 @@
 <meta property="og:url" content="https://github.com/JonathanJing/openclaw-dashboard">
 <meta property="og:image" content="https://raw.githubusercontent.com/JonathanJing/openclaw-dashboard/main/screenshots/tasks-kanban.png">
 <script src="https://cdn.jsdelivr.net/npm/marked@14/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
@@ -1023,11 +1024,18 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
    ═══════════════════════════════════════════════ */
 
 // ─── Auth ───
+// Token is read once from URL param (e.g. ?token=xxx) then stripped from the address bar.
+// All API calls send it via Authorization header — never in URL query strings.
 function getToken() {
   const p = new URLSearchParams(location.search).get('token');
-  if (p) return p;
-  try { const s = JSON.parse(localStorage.getItem('openclaw.control.settings.v1') || '{}'); if (s.token) return s.token; } catch(e) {}
-  return localStorage.getItem('openclaw_token') || '';
+  if (p) {
+    // Strip token from URL to avoid leaking in Referer / logs / browser history
+    const clean = new URL(location.href);
+    clean.searchParams.delete('token');
+    history.replaceState(null, '', clean.pathname + clean.search + clean.hash);
+    return p;
+  }
+  return '';
 }
 const TOKEN = getToken();
 const API = (location.port === '18789' || location.port === '18790')
@@ -1097,12 +1105,10 @@ function toggleLanguage() {
 }
 
 async function apiFetch(path, opts = {}) {
-  const sep = path.includes('?') ? '&' : '?';
-  const url = `${API}${path}${sep}token=${encodeURIComponent(TOKEN)}`;
-  const res = await fetch(url, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }
-  });
+  const url = `${API}${path}`;
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  if (TOKEN) headers['Authorization'] = `Bearer ${TOKEN}`;
+  const res = await fetch(url, { ...opts, headers });
   if (!res.ok) {
     const ct = res.headers.get('content-type') || '';
     if (ct.includes('json')) {
@@ -1496,12 +1502,17 @@ function renderMarkdown(text) {
   return `<p>${html}</p>`;
 }
 
-// ─── Full Markdown (using marked.js library) ───
+// ─── Full Markdown (using marked.js library + DOMPurify) ───
+function sanitizeHtml(html) {
+  if (typeof DOMPurify !== 'undefined') return DOMPurify.sanitize(html);
+  // Fallback: strip all tags
+  const d = document.createElement('div'); d.textContent = html; return d.innerHTML;
+}
 function renderFullMarkdown(text) {
   if (!text) return '';
   try {
     if (typeof marked !== 'undefined' && marked.parse) {
-      return marked.parse(text, { breaks: true, gfm: true });
+      return sanitizeHtml(marked.parse(text, { breaks: true, gfm: true }));
     }
   } catch(e) { /* fallback */ }
   return renderMarkdown(text);
@@ -2246,9 +2257,8 @@ function renderMarkdownPreview(content) {
   }
   try {
     if (typeof marked !== 'undefined' && marked.parse) {
-      preview.innerHTML = marked.parse(content, { breaks: true, gfm: true });
+      preview.innerHTML = sanitizeHtml(marked.parse(content, { breaks: true, gfm: true }));
     } else {
-      // Fallback to simple rendering
       preview.innerHTML = renderMarkdown(content);
     }
   } catch(e) {
@@ -3492,12 +3502,8 @@ async function opsAction(action) {
     let html = '';
 
     if (action === 'restart') {
-      const r = await fetch('http://127.0.0.1:18789/hooks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'restart', token: '451374645a4c6bcfc20641ab49ea3091803287d23ccebea2' })
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const r = await apiFetch('/ops/restart', { method: 'POST' });
+      if (r?.error) throw new Error(r.error);
       if (badge) badge.textContent = '✅';
       html = '<span style="color:var(--green)">✅ Restart signal sent to OpenClaw gateway.</span>';
 

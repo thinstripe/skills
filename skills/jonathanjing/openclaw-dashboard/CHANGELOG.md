@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.7.0] - 2026-03-01
+
+### 🔒 Security (VirusTotal Review Round 2)
+- **Removed hardcoded gateway restart token** from agent-dashboard.html; restart now proxied through authenticated `/ops/restart` API endpoint
+- **Token no longer sent via URL query params** in API calls; switched to `Authorization: Bearer` header for all apiFetch requests
+- **Token stripped from URL** immediately on page load via `history.replaceState` to prevent leakage in Referer/logs/history
+- **Removed localStorage token storage** from server-monitor.html (was still present despite v1.6.0 claim)
+- **Added DOMPurify** for all marked.js markdown rendering to prevent XSS via untrusted task content
+- **Added `/ops/restart` server-side endpoint** that proxies to gateway hooks with env-sourced HOOK_TOKEN
+- **Updated SECURITY.md** to accurately reflect auth flow, XSS mitigations, and restart architecture
+
 ## [2.1.0] - 2026-02-22
 
 ### 🎯 Dashboard UX and Information Architecture
