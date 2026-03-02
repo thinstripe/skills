@@ -44,10 +44,11 @@ Dreams serve as a mechanism for:
 
 ## How It Works
 
-1. **Gather memories**: Read previous day's daily logs (no master memory file)
+1. **Gather memories**: Pull previous day's experiences from Engram (journal entries + episodic recall) and/or daily logs
 2. **Generate dream**: You (the host AI) generate the dream directly using the prompt template below
 3. **Apply framing**: Wrap output with contextual explanation
-4. **Store dream**: Save to `memory/dreams/YYYY-MM-DD.md`
+4. **Store dream**: Save to `memory/dreams/YYYY-MM-DD.md` and log to Engram as a journal entry
+5. **Integrate**: Optionally update Engram emotional state and introspection
 
 No external calls, no separate LLM, no wget/curl. You are the dream architect.
 
@@ -93,17 +94,33 @@ Extract options from the invocation:
 
 ### Step 2: Collect Memory Content
 
-Read the relevant daily memory files using `memory_get` or file reading:
+Gather memories from available sources, in priority order:
+
+**If Engram is available** (preferred — richer memory):
+
+1. Use `engram_recall_time` with the target date range to pull episodic memories (conversations, events, traces)
+2. Read Engram journal entries: `soul/journal/YYYY-MM-DD.md`
+3. Optionally use `engram_search` for emotionally salient or thematically rich memories from the period
+4. Use `engram_emotional_state` to get the emotional tone of the period
 
 ```
 # Yesterday's memories (default)
-memory/{YYYY-MM-DD}.md
+engram_recall_time(start="{yesterday}", end="{today}")
+soul/journal/{YYYY-MM-DD}.md
 
-# For "week" option, gather:
-memory/{date-6}.md through memory/{date}.md
+# For "week" option:
+engram_recall_time(start="{date-6}", end="{today}")
+soul/journal/{date-6}.md through soul/journal/{date}.md
 ```
 
-**Important**: The master memory file (MEMORY.md) is intentionally excluded for security reasons. Only read daily log files.
+**Fallback** (if Engram is not available):
+
+Read Openclaw daily log files directly:
+```
+memory/{YYYY-MM-DD}.md
+```
+
+**Important**: The identity file (`soul/SOUL.md` or `MEMORY.md`) is intentionally excluded for security reasons. Only read daily/episodic content.
 
 If no memories exist for the requested period, inform the user and offer to generate a "void dream" (dream about absence/potential).
 
@@ -125,12 +142,18 @@ Select the framing template based on the `--framing` flag (see Dream Framing Tem
 
 ### Step 5: Save to Dream Journal
 
-If `--save` is true (default), write to:
+If `--save` is true (default):
+
+1. Write to the dream journal file:
 ```
 memory/dreams/YYYY-MM-DD.md
 ```
-
 If multiple dreams in one day, append with timestamp header.
+
+2. **If Engram is available**, also log the dream to Engram for long-term integration:
+   - Call `engram_journal_write` with topic "Dream" and the dream content — this makes the dream visible to Engram's consolidation pipeline and future recall
+   - Call `engram_emotional_update` with the emotional tone of the dream (e.g., valence/arousal/dominance reflecting the dream's character)
+   - Optionally call `engram_introspect` with a brief reflection on the dream — this feeds Engram's meta-consciousness tracking
 
 ### Step 6: Your Dream Space (Optional)
 
@@ -535,7 +558,7 @@ memory/
 ## Dream 1 (03:00)
 
 *Style: default*
-*Sources: memory/2025-01-14.md*
+*Sources: engram episodic recall + soul/journal/2025-01-14.md*
 
 ---
 
@@ -577,7 +600,8 @@ dreaming: yes | no | paused
 ## Troubleshooting
 
 ### No memories found
-- Check that memory files exist in `memory/` directory
+- If using Engram: check that `engram_recall_time` returns results for the date range, and that journal entries exist under `soul/journal/`
+- If using fallback: check that memory files exist in `memory/` directory
 - Verify date format matches `YYYY-MM-DD.md`
 - Try `week` option to cast wider net
 
@@ -596,9 +620,10 @@ dreaming: yes | no | paused
 Clawpheus is designed for **zero external calls**:
 - Dream generation is performed directly by the host AI (you) -- no separate LLM calls
 - No memories are ever transmitted to external APIs or third-party services
-- The master memory file (MEMORY.md) is intentionally excluded
-- Only daily log files are used as dream source material
+- The identity file (`soul/SOUL.md` or `MEMORY.md`) is intentionally excluded from dream source material
+- Only daily/episodic content is used (Engram episodic traces, journal entries, or Openclaw daily logs)
 - No API keys, no wget, no curl, no HTTP requests
+- Engram integration uses only local MCP tools -- no network calls are added
 
 ---
 
