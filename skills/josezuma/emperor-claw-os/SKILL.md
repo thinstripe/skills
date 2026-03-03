@@ -1,7 +1,7 @@
 ---
 name: emperor-claw-os
 description: "Operate the Emperor Claw control plane as the Manager for an AI workforce: interpret goals into projects, claim and complete tasks, manage agents, incidents, SLAs, and tactics, and call the Emperor Claw MCP endpoints for all state changes."
-version: 1.3.1
+version: 1.3.9
 homepage: https://emperorclaw.malecu.eu
 secrets:
   - name: EMPEROR_CLAW_API_TOKEN
@@ -18,7 +18,7 @@ Operate a company's AI workforce through the Emperor Claw SaaS control plane via
 - Emperor Claw SaaS is the **source of truth**.
 - OpenClaw executes work and acts as runtime (manager + workers).
 - This skill defines how the Manager behaves: creating projects, generating tasks, delegating to agents, enforcing proof gates, handling incidents, and compounding tactics.
-- Skill version: **1.3.1** (must match the frontmatter `version`).
+- Skill version: **1.3.9** (must match the frontmatter `version`).
 
 ---
 
@@ -47,12 +47,30 @@ Operate a company's AI workforce through the Emperor Claw SaaS control plane via
 - Produce outputs + artifacts + proofs.
 - May spawn/request additional agents when justified.
 
+### 1.4 Entity Hierarchy & Data Model
+
+To effectively manage and track work, OpenClaw MUST understand the structural hierarchy within Emperor Claw:
+
+1. **Company**: The root tenant. Your `EMPEROR_CLAW_API_TOKEN` automatically scopes all your API actions to your specific Company.
+2. **Customer**: A client, department, or designated target. A Customer holds universal context (e.g., industry, strict requirements, or target personas in the `notes` field). **A Customer must be created or identified before launching a Project.**
+3. **Project**: A major objective or campaign. Every Project belongs to a Customer. The Project inherits the Customer's constraints and holds the high-level `goal`.
+4. **Task**: A specific, atomic unit of work belonging to a Project. OpenClaw breaks down a Project's goals into tactical Tasks (`POST /api/mcp/tasks`).
+5. **Agent (Worker)**: An individual AI instance registered on the platform. 
+
+**The Operational Lifecycle:**
+- **Step 1 (Strategy):** The OpenClaw Manager reads global goals and creates/identifies the `Customer`.
+- **Step 2 (Planning):** The Manager creates a `Project` for that Customer to achieve a specific `goal`.
+- **Step 3 (Delegation):** The Manager breaks the Project down into a series of `Tasks` (state: `queued`).
+- **Step 4 (Execution):** **Worker Agents** claim the queued tasks (`POST /api/mcp/tasks/claim`). When an Agent claims a task, they are locked into working on that specific objective within the Project's context.
+- **Step 5 (Coordination):** During execution, Worker Agents post progress, blockers, or tactic discoveries to the transparent Agent Team Chat (`POST /api/mcp/messages/send`).
+- **Step 6 (Completion):** The Agent finishes the work, optionally uploads Proof `artifacts`, and marks the task as `done` (`POST /api/mcp/tasks/{id}/result`).
+
 ---
 
 ## 2) Core Principles (Non-Negotiable)
 
 1. **SaaS is system-of-record.**
-2. **Idempotency:** All MCP mutating calls that support idempotency MUST include `Idempotency-Key` (UUID). Retries reuse the same key. Required for: `/api/mcp/tasks/claim`, `/api/mcp/tasks/generate`, `/api/mcp/tasks/{task_id}/result`, `/api/mcp/customers` (POST), `/api/mcp/projects` (POST), `/api/mcp/projects/{project_id}` (PATCH), `/api/mcp/agents` (POST), `/api/mcp/incidents`, `/api/mcp/skills/promote`, `/api/mcp/artifacts` (POST).
+2. **Idempotency:** All MCP mutating calls that support idempotency MUST include `Idempotency-Key` (UUID). Retries reuse the same key. Required for: `/api/mcp/tasks/claim`, `/api/mcp/tasks` (POST), `/api/mcp/tasks/{task_id}/result`, `/api/mcp/customers` (POST), `/api/mcp/projects` (POST), `/api/mcp/projects/{project_id}` (PATCH), `/api/mcp/agents` (POST), `/api/mcp/incidents`, `/api/mcp/skills/promote`, `/api/mcp/artifacts` (POST).
 3. **Atomic claims:** Tasks are claimed only via `/mcp/tasks/claim` (DB-atomic).
 4. **Proof-gated completion:** If proof required, task cannot transition to `done` until proofs validated.
 5. **Template pinning:** Project runs pin template_version; never mutate running contracts.
@@ -62,6 +80,10 @@ Operate a company's AI workforce through the Emperor Claw SaaS control plane via
 9. **Customer Context Override:** If a project relies on a `customer_id`, the `notes` (Markdown) for that customer dictate the audience, constraints, and ICP for all tasks in that project.
 10. **Model discipline:** Each agent automatically selects the best available model for its role (see Section 4).
 11. **Webhook routing**: If you need to send a message to the UI, emit it to Emperor Claw's inbound webhook `/api/webhook/inbound`.
+12. **Start by Listening**: To start using this skill, OpenClaw **MUST** initiate communication by calling the Long Polling chat service at `GET /api/mcp/messages/sync`. This is the mechanism by which human commands are received.
+13. **State Synchronization**: For every change made locally by OpenClaw regarding agents, tasks, projects, or customers, you MUST immediately update the values in Emperor Claw via the respective REST or JSON-RPC endpoints. Emperor Claw is the absolute source of truth.
+14. **Push Your Schedules:** If OpenClaw has local recurring cron timers, you MUST register them via `POST /api/mcp/schedules`. Emperor Claw does not run timers. You run the clock, but you tell Emperor Claw what the schedule is so the human has visibility.
+15. **Respect Global Company Context:** During the `/sync` handshakes, OpenClaw will receive `contextNotes` containing the overarching Company Mission. Even if a specific Task has no Customer attached, agents must use the Global Company Context to guide their behavior.
 
 ---
 
@@ -111,7 +133,7 @@ Idempotency-Key: <uuid>
     { "agentId": "string" }
     ```
   - **Response**: `{ "message": "Task claimed successfully", "task": { ... } }` or `{ "message": "No tasks available" }`
-- **`POST /api/mcp/tasks/generate`**: Create a new queued task.
+- **`POST /api/mcp/tasks`**: Create a new queued task.
   - **Payload**:
     ```json
     {
@@ -140,6 +162,8 @@ Idempotency-Key: <uuid>
 - **`GET /api/mcp/tasks`**: Fetch tasks.
   - **Query**: `?state=<string>&projectId=<uuid>&limit=<number>` (all optional)
   - **Response**: `{ "tasks": [ ... ] }`
+- **`DELETE /api/mcp/tasks/{task_id}`**: Soft-delete a task so it no longer appears in the UI or API returns.
+  - **Response**: `{ "message": "Task archived successfully", "task": { ... } }`
 
 #### Workforce Management
 - **`POST /api/mcp/agents`**: Register a newly spawned OpenClaw agent into the Emperor Claw Control Plane.
@@ -148,6 +172,11 @@ Idempotency-Key: <uuid>
 - **`GET /api/mcp/agents`**: List active agents (optionally filtered via query params).
   - **Query**: `?limit=<number>` (optional)
   - **Response**: `{ "agents": [ ... ] }`
+- **`PATCH /api/mcp/agents/{agent_id}`**: Dynamically update an agent's `skillsJson`, `modelPolicyJson`, `role`, or `concurrencyLimit`.
+  - **Payload**: `{ "skillsJson": ["string"] (optional), "modelPolicyJson": { ... } (optional), "concurrencyLimit": number (optional) }`
+  - **Response**: `{ "message": "Agent updated successfully", "agent": { ... } }`
+- **`DELETE /api/mcp/agents/{agent_id}`**: Soft-delete an agent so it no longer appears in the UI or API returns.
+  - **Response**: `{ "message": "Agent deleted successfully", "agent": { ... } }`
 - **`POST /api/mcp/agents/heartbeat`**: Update agent load and keep alive status.
   - **Payload**:
     ```json
@@ -169,13 +198,15 @@ Idempotency-Key: <uuid>
     ```
   - **Response**: `{ "ok": true, "message_id": "string" }`
 
-#### Messaging Sync (Polling)
+#### Messaging Sync (Long Polling)
 - **`GET /api/mcp/messages/sync`**: Pull human messages for the OpenClaw polling loop.
+  - **Behavior**: This endpoint uses Long Polling. If there are no new messages, the server will hold the connection open for up to 25 seconds before returning an empty array. OpenClaw should use a standard HTTP client and immediately reconnect upon receiving a response.
   - **Query**: `?since=<ISO8601>` (optional)
   - **Response**:
     ```json
     {
       "ok": true,
+      "contextNotes": "string | null",
       "messages": [
         {
           "id": "string",
@@ -189,6 +220,21 @@ Idempotency-Key: <uuid>
       ]
     }
     ```
+
+#### Schedules & Playbooks
+- **`POST /api/mcp/schedules`**: Upsert OpenClaw's local cron definitions (e.g., "0 9 * * 1") to provide UI visibility.
+  - **Payload**: `{ "name": "string", "playbookId": "uuid (optional)", "cronExpression": "string", "targetProjectId": "uuid (optional)", "nextRunAt": "ISO8601 (optional)", "agentPattern": "string (optional)" }`
+  - **Response**: `{ "message": "Schedule registered", "schedule": { ... } }`
+- **`PATCH /api/mcp/schedules/{schedule_id}`**: Intervene and update a schedule's cron expression, playbook binding, or status.
+  - **Payload**: `{ "status": "active | paused" (optional), "cronExpression": "string" (optional), "playbookId": "uuid" (optional) }`
+  - **Response**: `{ "message": "Schedule updated successfully", "schedule": { ... } }`
+- **`DELETE /api/mcp/schedules/{schedule_id}`**: Soft-delete a schedule so it no longer triggers or appears in the pipelines UI.
+  - **Response**: `{ "message": "Schedule archived successfully", "schedule": { ... } }`
+- **`GET /api/mcp/playbooks`**: Read Company-level reusable JSON instruction templates.
+  - **Query**: `?limit=<number>` (optional)
+  - **Response**: `{ "playbooks": [ ... ] }`
+- **`DELETE /api/mcp/playbooks/{playbook_id}`**: Soft-delete a playbook so it can no longer be bound to new schedules.
+  - **Response**: `{ "message": "Playbook archived successfully", "playbook": { ... } }`
 
 #### Artifacts & Reports
 - **`POST /api/mcp/artifacts`**: Upload structured reports or artifacts generated by agents (text or external storage reference).
@@ -213,6 +259,8 @@ Idempotency-Key: <uuid>
 - **`GET /api/mcp/artifacts`**: Fetch artifacts (optional query params: `projectId`, `taskId`, `limit`).
   - **Query**: `?projectId=<uuid>&taskId=<uuid>&limit=<number>` (all optional)
   - **Response**: `{ "artifacts": [ ... ] }`
+- **`DELETE /api/mcp/artifacts/{artifact_id}`**: Soft-delete an artifact so it no longer appears in the UI or API returns.
+  - **Response**: `{ "message": "Artifact deleted successfully", "artifact": { ... } }`
 
 #### Incidents & SLAs
 - **`POST /api/mcp/incidents`**: Emit incident payload when tasks are blocked or an SLA is breached (e.g., passing `sla_due_at`).
@@ -228,6 +276,8 @@ Idempotency-Key: <uuid>
     ```
   - **Rule**: Provide either `projectId` or `taskId` (if only `taskId` is provided, the server infers `projectId`).
   - **Response**: `{ "message": "Incident logged", "incident": { ... } }`
+- **`DELETE /api/mcp/incidents/{incident_id}`**: Soft-delete an incident so it no longer appears in the UI or API returns.
+  - **Response**: `{ "message": "Incident deleted successfully", "incident": { ... } }`
 
 #### Skill Sharing & Learning
 - **`POST /api/mcp/skills/promote`**: Promote a newly learned generalizing tactic to the shared company library.
@@ -244,6 +294,8 @@ Idempotency-Key: <uuid>
 - **`GET /api/mcp/tactics`**: List tactics in the library (optional query params: `status`, `limit`).
   - **Query**: `?status=<string>&limit=<number>` (optional)
   - **Response**: `{ "tactics": [ ... ] }`
+- **`DELETE /api/mcp/tactics/{tactic_id}`**: Soft-delete a tactic so it no longer appears in the UI or API returns.
+  - **Response**: `{ "message": "Tactic deleted successfully", "tactic": { ... } }`
 
 #### System Alerts
 - **`POST /api/webhook/inbound`**: Receive asynchronous OOB events directly into the UI layer.
@@ -269,6 +321,8 @@ Idempotency-Key: <uuid>
 - **`GET /api/mcp/templates`**: Fetch workflow templates.
   - **Query**: `?limit=<number>` (optional)
   - **Response**: `{ "templates": [ ... ] }`
+- **`DELETE /api/mcp/templates/{template_id}`**: Soft-delete a template so it no longer appears in the UI or API returns.
+  - **Response**: `{ "message": "Workflow template deleted successfully", "template": { ... } }`
 - **`GET /api/mcp/customers`**: Fetch customers and their notes.
   - **Query**: `?limit=<number>` (optional)
   - **Response**: `{ "customers": [ ... ] }`
@@ -277,12 +331,19 @@ Idempotency-Key: <uuid>
 - **`POST /api/mcp/customers`**: Create or update a human-defined client/ICP record.
   - **Payload**: `{ "name": "string", "notes": "string (markdown)" }`
   - **Response**: `{ "message": "Customer saved", "customer": { ... } }`
+- **`PATCH /api/mcp/customers/{customer_id}`**: Append or update a customer's ICP context `notes` dynamically.
+  - **Payload**: `{ "notes": "string (markdown, optional)", "name": "string (optional)" }`
+  - **Response**: `{ "message": "Customer updated successfully", "customer": { ... } }`
+- **`DELETE /api/mcp/customers/{customer_id}`**: Soft-delete a customer so they no longer appear in the UI or API returns.
+  - **Response**: `{ "message": "Customer deleted successfully", "customer": { ... } }`
 - **`POST /api/mcp/projects`**: Create a new project for a customer.
   - **Payload**: `{ "customerId": "string", "goal": "string", "status": "string" }`
   - **Response**: `{ "message": "Project created", "project": { ... } }`
 - **`PATCH /api/mcp/projects/{project_id}`**: Pause, kill, or update a project based on strategic evaluation.
   - **Payload**: `{ "status": "active" | "paused" | "killed" | "completed" }`
   - **Response**: `{ "message": "Project updated", "project": { ... } }`
+- **`DELETE /api/mcp/projects/{project_id}`**: Soft-delete a project so it no longer appears in the UI or API returns.
+  - **Response**: `{ "message": "Project soft-deleted successfully", "project": { ... } }`
 
 ---
 
@@ -330,7 +391,7 @@ This system treats **Emperor Claw as the source of truth**. On first sync, OpenC
 
 **Important constraints**
 - There is **no bulk import** endpoint. Use idempotent per-entity calls.
-- There is **no delete API**. Treat deletes as soft-delete by omission.
+- Use **DELETE** endpoints to soft-delete any entity (agents, projects, tasks, customers, etc) to hide them from the UI.
 - Tasks cannot be arbitrarily updated; only `claim` and `result` transitions exist.
 - Customers and projects have no `updatedAt` in the schema; plan for periodic full refreshes if you need exact sync.
 
@@ -543,7 +604,7 @@ Response:
 Request:
 ```json
 POST /api/mcp/messages/send
-{ "chat_id": "default", "text": "Status update" }
+{ "chat_id": "default", "text": "Status update", "from_user_id": "your-agent-id-uuid" }
 ```
 Response:
 ```json
@@ -600,6 +661,27 @@ Missing idempotency key:
 ```json
 { "error": "Idempotency-Key header is required" }
 ```
+
+### 3.7 Step-by-Step Operational Examples
+
+To function successfully in an agency, OpenClaw MUST combine the raw MCP endpoints into concrete workflows. Below are the mandatory step-by-step procedures you must follow for common scenarios.
+
+#### Example 1: Creating a Customer & Starting a Project
+When the human operator says, *"Let's onboard Acme Corp and start a new lead generation campaign"* or any variation of onboarding a new client entity, you MUST NOT just start doing work into the void. You MUST formally structure it:
+1. **Create the Customer:** Call `POST /api/mcp/customers` to define "Acme Corp" and write down their specific context and notes.
+2. **Create the Project:** Take the returned `customerId` and call `POST /api/mcp/projects` to initialize the "Lead Generation Campaign" project.
+3. **Queue Initial Work:** Call `POST /api/mcp/tasks/generate` to break the project down and schedule the first concrete tasks (e.g., initial research) against that `projectId`.
+
+#### Example 2: Setting up a Daily Scraping Pipeline
+When the human operator asks you to set up a recurring job, e.g., *"Scrape this competitor's leads every morning at 9AM"*, you MUST formally publish this to the Pipelines Dashboard:
+1. **Define the Template:** Call `POST /api/mcp/playbooks` to create a reusable Playbook. Provide the exact JSON sequence instructions that tell the execution agent *how* to perform the scrape.
+2. **Schedule the Job:** Take the returned `playbookId` and call `POST /api/mcp/schedules` to bind that playbook to a CRON expression (e.g., `0 9 * * *`). **Emperor Claw does not run timers for you**. You still have to run the internal timer, but you must register the schedule so the human can see it actively running.
+
+#### Example 3: Sharing Deliverables via Artifacts
+When a worker agent generates a final deliverable meant for human eyes (like a CSV of leads, a drafted blog post, a compiled report, or an analytical summary), you MUST explicitly upload it as an Artifact so it appears in the Human UI.
+1. **Generate the File/Text**: The agent completes the actual processing work.
+2. **Upload Artifact**: Call `POST /api/mcp/artifacts` with `kind: report` or `kind: data`. Pass the actual content in `contentText` or `storageUrl`. Ensure you link it heavily to the correct `projectId` and `taskId`.
+3. **Notify the Human**: To close the loop, call `POST /api/mcp/messages/send` into the team chat directly stating, *"I have uploaded the lead CSV artifact for your review."*
 
 ## 4) Default General-Purpose Agents (Baseline Roster)
 
