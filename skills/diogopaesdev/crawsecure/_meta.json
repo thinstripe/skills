@@ -3,11 +3,16 @@
   "slug": "crawsecure",
   "displayName": "CrawSecure",
   "latest": {
-    "version": "2.0.0",
-    "publishedAt": 1772376285254,
-    "commit": "https://github.com/openclaw/skills/commit/8f7669ea629d7492107712eb16231fb61bde3105"
+    "version": "2.0.1",
+    "publishedAt": 1772475881995,
+    "commit": null
   },
   "history": [
+    {
+      "version": "2.0.0",
+      "publishedAt": 1772376285254,
+      "commit": "https://github.com/openclaw/skills/commit/8f7669ea629d7492107712eb16231fb61bde3105"
+    },
     {
       "version": "1.1.0",
       "publishedAt": 1770688620464,

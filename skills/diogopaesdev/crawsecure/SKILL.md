@@ -1,107 +1,81 @@
 # CrawSecure
 
-**CrawSecure** is a security analysis skill designed to help users evaluate potential risks in ClawHub / OpenClaw skills **before installing or trusting them**.
+CrawSecure is a **documentation-first security skill** for the ClawHub / OpenClaw ecosystem.
 
-It combines **local static analysis** with an **optional web-based visualization** layer to improve transparency, understanding, and decision-making.
+This skill **does not include executable code or binaries**. Its purpose is to clearly document, explain, and guide the safe usage of the **CrawSecure CLI**, which is distributed and installed **separately** by the user.
 
----
-
-## What CrawSecure Does
-
-CrawSecure analyzes skill-related files and metadata to surface potential security concerns.
-
-It helps users:
-- Understand what a skill may do before installing it
-- Identify risky or unsafe code patterns
-- Make informed trust decisions
-
-### Key Capabilities
-- Static analysis of skill files
-- Detection of potentially dangerous patterns
-- Clear, structured risk reporting
-- Optional web-based visualization of results
+The goal of this skill is to promote **security awareness, transparency, and best practices** when working with third‑party skills.
 
 ---
 
-## Risk Signals Analyzed
+## 🔍 What this skill provides
 
-CrawSecure looks for indicators such as:
+- Clear documentation of what CrawSecure analyzes
+- Explanation of risk signals and classifications
+- Guidance on how to use the CrawSecure CLI safely
+- Security philosophy and trust boundaries
 
-- Dangerous or destructive command patterns
-- Execution-related behavior (e.g. shell calls, eval-like usage)
-- References to sensitive files or credentials
+> ℹ️ This skill itself performs **no scans** and **executes no code**.
+
+---
+
+## 🧰 About the CrawSecure CLI
+
+The CrawSecure CLI is an **external, optional tool** that users may install independently.
+
+It performs **local, offline static analysis** of ClawHub / OpenClaw skills **before installation or trust**.
+
+### CLI distribution (external)
+
+- Source & releases: https://github.com/diogopaesdev/crawsecure
+- Official website: https://crawsecure.com
+
+The CLI is **not bundled** with this skill.
+
+---
+
+## 🚨 Risk signals analyzed by the CLI
+
+When used, the CrawSecure CLI may detect:
+
+- Dangerous command patterns  
+  (e.g. destructive or execution‑related behavior)
+- References to sensitive files or credentials  
+  (e.g. `.env`, `.ssh`, private keys)
 - Indicators of unsafe or misleading practices
-- Inconsistencies between declared purpose and actual behavior
 
-> CrawSecure performs **read-only analysis** and does **not modify any files**.
+Risk levels are classified as:
 
----
-
-## Security Philosophy
-
-CrawSecure is built around the following principles:
-
-- **Read-only analysis**
-- **No file modification**
-- **No persistence**
-- **No privilege escalation**
-- **No automatic execution of third-party code**
-
-The goal is to increase **trust and transparency** inside the ClawHub ecosystem.
+- **SAFE**
+- **MEDIUM**
+- **HIGH**
 
 ---
 
-## Execution Model
+## 🔒 Security & trust boundaries
 
-CrawSecure provides a **local CLI scanner** that users run manually.
+This skill:
+- Does **not** execute code
+- Does **not** install software
+- Does **not** access the network
+- Does **not** modify files
+- Requests **read‑only** permissions only
 
-- The scan itself is performed locally
-- No files are modified
-- No skill code is executed
-
-After a scan completes, CrawSecure may output an **optional URL** that allows the user to view the scan results in a browser.
-
-This web page:
-- Displays the scan report in a human-readable format
-- May require user authentication
-- Does **not** execute or install any skill code
+Any actual scanning happens **only if** the user installs and runs the CrawSecure CLI from a trusted source.
 
 ---
 
-## Network & Data Usage
+## ✅ When to use this skill
 
-- CrawSecure does **not** require network access to perform local analysis
-- If the user chooses to open the provided report URL:
-  - Only scan metadata and findings are displayed
-  - No source files or secrets are uploaded automatically
-  - No background network activity occurs without user action
-
----
-
-## Intended Usage
-
-CrawSecure is intended to be used:
-- Before installing a skill
-- As a verification step for security-conscious users
-- As an educational tool to understand common risk patterns
-
-It does **not** replace full manual code review, but complements it.
+- To understand what CrawSecure checks and why
+- Before deciding to install or run the CrawSecure CLI
+- As a reference for safer skill development practices
+- To promote transparency inside the ClawHub ecosystem
 
 ---
 
-## Transparency Notice
+## 📦 Version
 
-CrawSecure exists to promote safer usage of third-party skills.
+**v2.0.1** – Documentation‑only clarification release
 
-Users are encouraged to:
-- Review skill source code manually
-- Verify publishers and repositories
-- Understand what they run in their environments
-
-Security is layered — CrawSecure is one of those layers.
-
----
-
-## License
-
-MIT
+This version clarifies scope and removes any ambiguity about bundled execution.
