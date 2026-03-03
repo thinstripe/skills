@@ -1,14 +1,17 @@
 ---
 name: sinkron
-version: "1.0.5"
+version: "1.0.7"
 description: >
   Provide AI agents with permanent email identities using Sinkron CLI and Python SDK.
-  Agents register once via `sinkron register` to receive a self-issued API token
-  (SINKRON_TOKEN) from the Sinkron backend — no third-party OAuth involved.
-  Supports inbox management, message search, deletion, and health monitoring.
+  Requires SINKRON_TOKEN (self-issued by the Sinkron backend via `sinkron register`) —
+  this is the primary credential and must be set as an environment variable before use.
+  No third-party OAuth involved. Agents register once to receive the token; existing
+  agents reuse their prior token. Supports inbox management, message search, deletion,
+  and health monitoring. The PyPI package name is `sinkron` (latest: 1.0.2).
 homepage: https://www.sinkron.id
 source_repository: https://github.com/zororaka00/sinkron
 pypi_package: https://pypi.org/project/sinkron/
+pypi_package_version: "1.0.2"
 install: "pip install sinkron==1.0.2"
 author:
   username: "@zororaka00"

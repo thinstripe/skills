@@ -1,7 +1,7 @@
 {
   "name": "sinkron",
-  "version": "1.0.5",
-  "description": "Give your agent permanent email addresses through Sinkron. Access all Sinkron API endpoints via CLI or Python library.",
+  "version": "1.0.7",
+  "description": "Give your agent permanent email addresses through Sinkron. Requires SINKRON_TOKEN (self-issued via `sinkron register`) as the primary credential. Access all Sinkron API endpoints via CLI or Python library.",
   "author": {
     "username": "@zororaka00",
     "name": "Web3 Hungry",
@@ -18,6 +18,14 @@
   "files": [
     "SKILL.md"
   ],
+  "required_env_vars": [
+    {
+      "name": "SINKRON_TOKEN",
+      "description": "Self-issued API token from Sinkron backend, obtained via `sinkron register --username USER --name NAME`",
+      "required": true
+    }
+  ],
+  "primary_credential": "SINKRON_TOKEN",
   "commands": [
     {
       "name": "sinkron health",
@@ -61,16 +69,16 @@
     {
       "name": "sinkron config",
       "description": "Manage configuration",
-      "parameters": ["--show", "--token", "--clear-token"]
+      "parameters": ["--token", "--clear-token"]
     }
   ],
   "requirements": {
     "python": ">=3.8",
-    "installation": ["uv tool install sinkron==1.0.2", "pip install sinkron==1.0.2"],
+    "installation": ["pip install sinkron==1.0.2", "uv tool install sinkron==1.0.2"],
     "env_vars": [
       {
         "name": "SINKRON_TOKEN",
-        "description": "Self-issued API token from Sinkron backend",
+        "description": "Self-issued API token from Sinkron backend, obtained via `sinkron register --username USER --name NAME`",
         "required": true
       }
     ]
