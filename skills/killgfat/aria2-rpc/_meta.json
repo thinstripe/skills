@@ -1,0 +1,11 @@
+{
+  "owner": "killgfat",
+  "slug": "aria2-rpc",
+  "displayName": "Aria2 Rpc",
+  "latest": {
+    "version": "0.1.0",
+    "publishedAt": 1772537898297,
+    "commit": null
+  },
+  "history": []
+}
