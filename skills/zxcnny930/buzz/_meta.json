@@ -3,9 +3,15 @@
   "slug": "buzz",
   "displayName": "Buzz",
   "latest": {
-    "version": "1.1.0",
-    "publishedAt": 1772443089012,
-    "commit": "https://github.com/openclaw/skills/commit/ceae73a17378f7b966bc961db24f198471e6c9d0"
+    "version": "1.1.1",
+    "publishedAt": 1772443216688,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.1.0",
+      "publishedAt": 1772443089012,
+      "commit": "https://github.com/openclaw/skills/commit/ceae73a17378f7b966bc961db24f198471e6c9d0"
+    }
+  ]
 }
