@@ -4,9 +4,9 @@ description: Enterprise-grade agentic document processing API. Accurately extrac
 License: Commercial license required. New users receive 100 free credits monthly to offset usage.
 ---
 
-# Agentic Document Processing
+# Laiye Agentic Document Processing (ADP)
 
-Agentic Document Processing API — convert 10+ file formats（.jpeg,.jpg,.png,.bmp,.tiff,.pdf,.doc,.docx,.xls,.xlsx） to structured JSON/Excel with per-field confidence scores using VLM and LLM.
+Agentic Document Processing API — convert 10+ file formats (.jpeg, .jpg, .png, .bmp, .tiff, .pdf, .doc, .docx, .xls, .xlsx) to structured JSON/Excel with per-field confidence scores using VLM and LLM.
 
 > **Base URL:** `https://adp-global.laiye.com/?utm_source=clawhub`
 
@@ -268,14 +268,11 @@ curl -X POST "https://adp-global.laiye.com/open/agentic_doc_processor/laiye/v1/a
 
 ## Common Use Cases
 
-### Invoice Extraction
-Extracts: invoice_number, date, vendor, total_amount, line_items
+### Invoice/Receipt Extraction
+Extracts: invoice_number, invoice_date, vendor/customer_name, currency, vat_rate, total_amount_including_tax, total_amount_excluding_tax, line_items, etc.
 
-### ID Card Extraction
-Extracts: name, id_number, address, issue_date, expiry_date
-
-### Contract Extraction
-Extracts: parties, dates, clauses, amounts, signatures
+### Purchase Order Extraction
+Extracts: order_number, order_date, buyer_name/seller_name, address, total_amount, line_items, etc.
 
 ## Security & Privacy
 
@@ -298,9 +295,9 @@ Extracts: parties, dates, clauses, amounts, signatures
 
 ### File Size Limits
 
-- **Max file size:** 20MB
-- **Supported formats:** PDF, PNG, JPG, JPEG
-- **Concurrency limit:** 10 requests per tenant
+- **Max file size:** 50MB
+- **Supported formats:** .jpeg, .jpg, .png, .bmp, .tiff, .pdf, .doc, .docx, .xls, .xlsx
+- **Concurrency limit:** Free users support 1 concurrent request, paid users support 2 concurrent requests
 - **Timeout:** 10 minutes for sync requests
 
 ### Operational Safeguards
@@ -315,34 +312,22 @@ Extracts: parties, dates, clauses, amounts, signatures
 
 | Processing Stage | Cost |
 |-----------------|------|
-| Document Recognition (VLM) | 0.5 credits/page |
-| Document Extraction (LLM) | 1 credit/page |
-| **Total** | **1.5 credits/page** |
+| Document Parsing | 0.5 credits/page |
+| Purchase Order Extraction | 1.5 credits/page |
+| Invoice/Receipt Extraction | 1.5 credits/page |
+| Custom Extraction | 1 credit/page |
+
+**New users:** 100 free credits per month, no application restrictions.
 
 ## Troubleshooting
 
-**400 Bad Request:**
-- Provide `app_key` and `app_secret`
-- Provide exactly one input: `file_url` or `file_base64`
-- Verify application has published extraction config
-
-**401 Unauthorized:**
-- Verify `X-Access-Key` is valid
-- Check timestamp format (Unix timestamp)
-- Verify signature format (UUID)
-
-**404 Not Found:**
-- Application does not exist
-- No published extraction config found
-
-**500 Internal Server Error:**
-- Document conversion failed
-- VLM recognition timeout
-- LLM extraction failure
-
-**Sync Timeout:**
-- Use async endpoint for large files
-- Poll `/query/task/{task_id}` for results
+| Error Code | Description | Common Causes & Solutions |
+|------------|-------------|---------------------------|
+| **400 Bad Request** | Invalid request parameters | • Missing `app_key` or `app_secret`<br>• Must provide exactly one input: `file_url` or `file_base64`<br>• Application has no published extraction config |
+| **401 Unauthorized** | Authentication failed | • Invalid `X-Access-Key`<br>• Incorrect timestamp format (use Unix timestamp)<br>• Invalid signature format (must be UUID) |
+| **404 Not Found** | Resource not found | • Application does not exist<br>• No published extraction config found for the application |
+| **500 Internal Server Error** | Server-side processing error | • Document conversion failed<br>• VLM recognition timeout<br>• LLM extraction failure |
+| **Sync Timeout** | Request processing timed out | • Large files should use async endpoint<br>• Poll `/query/task/{task_id}` for results |
 
 ## Pre-Publish Security Checklist
 
@@ -357,8 +342,5 @@ Before publishing or updating this skill, verify:
 - [ ] File permission guidance is included for config files
 
 ## References
-
-- **API Base URL:** https://adp-global.laiye.com/
-- **Flow Documentation:** [ADP Flow Index](../../refers/backend/flows/ADP-Flow-Index.md)
-- **Extraction Flow:** [Document Extraction Flow](../../refers/backend/flows/09-Doc-Extraction-Flow.md)
-- **Recognition Flow:** [Document Recognition Flow](../../refers/backend/flows/08-Doc-Recognition-Flow.md)
+- **ADP Product Manual:** [ADP Product Manual (SaaS)](https://laiye-tech.feishu.cn/wiki/OfexwgVUQiOpEek4kO7c7NEJnAe)
+- **ADP API Documentation:** [Open API User Guide](https://laiye-tech.feishu.cn/wiki/S1t2wYR04ivndKkMDxxcp2SFnKd)

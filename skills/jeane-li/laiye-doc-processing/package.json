@@ -18,17 +18,5 @@
     "LLM",
     "VLM",
     "OCR"
-  ],
-  "openclaw": {
-    "requiredEnv": [
-      "ADP_ACCESS_KEY",
-      "ADP_APP_KEY",
-      "ADP_APP_SECRET"
-    ],
-    "primaryEnv": "ADP_ACCESS_KEY",
-    "endpoints": [
-      "https://adp-global.laiye.com/?utm_source=clawhub"
-    ],
-    "requiresCredentials": true
-  }
+  ]
 }
