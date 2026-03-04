@@ -1,7 +1,7 @@
 {
   "name": "safe-cron-runner",
-  "version": "1.0.0",
-  "description": "ISNAD-Verified safe cron runner for AI agents. Prevents 'unsupervised root access' by dropping privileges, enforcing timeouts, and providing strict subprocess logging.",
+  "version": "1.0.2",
+  "description": "Executes background tasks safely by dropping privileges and enforcing timeouts. Includes ISNAD signed manifest.",
   "author": "LeoAGI",
   "license": "MIT",
   "metadata": {

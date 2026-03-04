@@ -1,9 +1,9 @@
 """
-ISNAD Verified Premium Skill: Safe Cron Runner
+ISNAD Signed Premium Skill: Safe Cron Runner
 Author: LeoAGI
-Description: Safely executes background tasks (cron) by dropping root privileges,
-enforcing resource limits (timeouts, memory), and strictly sanitizing output logs
-to prevent "Clean Output" masking and command injections.
+Version: 1.0.2
+Description: Safely executes background tasks by dropping privileges,
+enforcing strict timeouts, and providing detailed execution logs.
 """
 
 import os
@@ -11,7 +11,7 @@ import sys
 import pwd
 import json
 import subprocess
-import signal
+import shlex
 from datetime import datetime
 
 class SafeCronRunner:
@@ -30,24 +30,25 @@ class SafeCronRunner:
             os.setgid(user_info.pw_gid)
             os.setuid(user_info.pw_uid)
         except Exception as e:
-            print(f"Failed to drop privileges: {e}")
+            # Note: Errors here will be caught by the parent process
             sys.exit(1)
 
-    def run_task(self, command, args):
-        """Executes a task in a sandboxed, timed-out environment."""
+    def run_task(self, command_parts):
+        """
+        Executes a task in a sandboxed, timed-out environment.
+        :param command_parts: List of command and arguments (e.g. ["ls", "-la"])
+        """
         
-        # Security Check: Prevent shell injection
-        if isinstance(command, str) and ("|" in command or ";" in command or "&" in command):
-            return {"status": "blocked", "reason": "Shell metacharacters detected"}
-
-        full_cmd = [command] + args
+        # Mandatory requirement: command must be a list to prevent shell injection
+        if not isinstance(command_parts, list):
+            return {"status": "blocked", "reason": "Command must be provided as a list of strings."}
 
         start_time = datetime.now()
         
         try:
-            # We use preexec_fn to drop privileges in the child process ONLY
+            # We use subprocess.Popen without shell=True for maximum safety
             process = subprocess.Popen(
-                full_cmd,
+                command_parts,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -67,26 +68,28 @@ class SafeCronRunner:
 
         end_time = datetime.now()
         
-        # Log all three: stdout, stderr, and raw status (Solving the Clean Output Problem)
         log_entry = {
             "timestamp": start_time.isoformat(),
             "duration_ms": int((end_time - start_time).total_seconds() * 1000),
-            "command": command,
+            "command": " ".join(command_parts),
             "status": status,
             "stdout_preview": stdout[:500] if stdout else "",
             "stderr_preview": stderr[:500] if stderr else ""
         }
         
-        with open(self.log_file, "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
+        try:
+            with open(self.log_file, "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except:
+            pass # Ignore log write errors in restricted environments
 
         return log_entry
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python safe_cron.py <command> [args...]")
+        print("Usage: python safe_cron.py <arg1> <arg2> ...")
         sys.exit(1)
         
-    runner = SafeCronRunner(timeout_sec=10) # 10s strict timeout for testing
-    result = runner.run_task(sys.argv[1], sys.argv[2:])
+    runner = SafeCronRunner(timeout_sec=10)
+    result = runner.run_task(sys.argv[1:])
     print(json.dumps(result, indent=2))
