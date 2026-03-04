@@ -1,0 +1,11 @@
+{
+  "owner": "lotfinity",
+  "slug": "whisper-tailnet-api",
+  "displayName": "Whisper Tailnet API",
+  "latest": {
+    "version": "0.1.0",
+    "publishedAt": 1772563391864,
+    "commit": null
+  },
+  "history": []
+}
