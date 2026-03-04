@@ -3,9 +3,15 @@
   "slug": "check-bookings-phone",
   "displayName": "Check Bookings Phone",
   "latest": {
-    "version": "1.0.1",
-    "publishedAt": 1772355789188,
-    "commit": "https://github.com/openclaw/skills/commit/cf76a43f84ddfef989549597f5b0dd6dc21b647b"
+    "version": "1.0.2",
+    "publishedAt": 1772423568463,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.1",
+      "publishedAt": 1772355789188,
+      "commit": "https://github.com/openclaw/skills/commit/cf76a43f84ddfef989549597f5b0dd6dc21b647b"
+    }
+  ]
 }

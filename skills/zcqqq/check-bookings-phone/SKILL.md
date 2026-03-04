@@ -1,6 +1,10 @@
 ---
 name: check-bookings-phone
 description: 检查携程旅行app预售订单的日期可用性。通过ADB连接Android设备，自动化操作携程app，遍历"未使用 预售订单"中的每个订单，查询指定日期范围内每天的预约状态（可约、约满、补差价等）。当用户提到检查携程订单、查看预售订单可用日期、查酒店预约状态时触发此skill。
+required_env_vars:
+  - MIDSCENE_MODEL_API_KEY
+  - MIDSCENE_MODEL_BASE_URL
+  - MIDSCENE_MODEL_NAME
 ---
 
 # 携程预售订单日期可用性检查
@@ -51,6 +55,10 @@ cd $SKILL_DIR && npx tsx scripts/checkBookings.ts --from 2026-05-01 --to 2026-05
 ```bash
 npx skills add <repo-path> -a openclaw
 ```
+
+## 隐私提示
+
+本 skill 通过 `@midscene/android` 对手机屏幕截图并发送至 `MIDSCENE_MODEL_BASE_URL` 指定的视觉模型 API 进行分析。屏幕上的订单信息（酒店名称、价格、日期等）会作为截图内容传输到该外部服务。请确保你了解并接受所用模型服务的数据处理政策。
 
 ## 前置条件
 
