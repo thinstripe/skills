@@ -16,7 +16,7 @@ else:
 
 setup(
     name="openclaw-icalendar-sync",
-    version="2.3.0",
+    version="2.4",
     author="Black_Temple",
     author_email="contact@clawhub.ai",
     description="Professional iCloud Calendar integration for OpenClaw agents",
@@ -42,11 +42,12 @@ setup(
     ],
     python_requires=">=3.9",
     install_requires=[
-        "caldav>=1.3.0",
-        "icalendar>=5.0.0",
-        "pyyaml>=6.0",
-        "python-dateutil>=2.8.0",
-        "keyring>=24.0.0",
+        "caldav>=1.3.0,<2.0.0",
+        "icalendar>=5.0.0,<6.0.0",
+        "pyyaml>=6.0,<7.0",
+        "python-dateutil>=2.8.0,<3.0.0",
+        "requests>=2.31.0,<3.0.0",
+        "keyring>=24.0.0,<25.0.0",
     ],
     entry_points={
         "console_scripts": [

@@ -1,14 +1,12 @@
 # =============================================================================
-# iCalendar Sync v2.3.0 - OpenClaw Skill Definition
+# iCalendar Sync v2.4 - OpenClaw Skill Definition
 # =============================================================================
 #
-# CRITICAL: This skill REQUIRES credentials:
-#   - ICLOUD_USERNAME (Apple ID email)
-#   - ICLOUD_APP_PASSWORD (App-Specific Password from appleid.apple.com)
+# CRITICAL: This skill needs credentials for CalDAV mode:
+#   - via ICLOUD_USERNAME / ICLOUD_APP_PASSWORD
+#   - or via YAML config file passed with --config
 #
-# These are explicitly declared as REQUIRED in ALL metadata files.
-#
-# NEW in v2.3.0:
+# NEW in v2.4:
 #   - ✨ UPDATE command: modify existing events without breaking UID
 #   - 🔁 Smart Recurrence: update single instance, all, or future instances
 #   - 📅 Exception handling: RECURRENCE-ID support for series modifications
@@ -49,13 +47,13 @@
 
 name: icalendar-sync
 display_name: "iCalendar Sync"
-version: 2.3.0
+version: "2.4"
 description: >
   Professional iCloud Calendar integration for OpenClaw.
   Provides bidirectional CalDAV sync with iCloud calendars.
   Core functionality: create, read, update, delete calendar events.
 
-  REQUIRES: ICLOUD_USERNAME and ICLOUD_APP_PASSWORD (see environment section below).
+  CalDAV mode requires credentials from env, keyring, or explicit YAML config.
 
   v2.2.12 adds Cyrillic support, headless config, and critical bug fixes.
 
@@ -86,26 +84,26 @@ runtime:
 
 dependencies:
   python:
-    - caldav>=1.3.0
-    - icalendar>=5.0.0
-    - pyyaml>=6.0
-    - python-dateutil>=2.8.0
-    - keyring>=24.0.0
-    - python-dotenv>=1.0.0
+    - caldav>=1.3.0,<2.0.0
+    - icalendar>=5.0.0,<6.0.0
+    - pyyaml>=6.0,<7.0
+    - python-dateutil>=2.8.0,<3.0.0
+    - requests>=2.31.0,<3.0.0
+    - keyring>=24.0.0,<25.0.0
 
 
 # =============================================================================
-# CREDENTIALS: These are REQUIRED despite any cached metadata saying "none"
+# CREDENTIALS: Optional in metadata because skill supports env/keyring/config/native modes
 # =============================================================================
 environment:
   - name: ICLOUD_USERNAME
     description: "Apple ID email address (e.g., name@icloud.com)"
-    required: true
+    required: false
     placeholder: "user@icloud.com"
   
   - name: ICLOUD_APP_PASSWORD
-    description: "App-Specific Password from appleid.apple.com (stored in system keyring, this is fallback only)"
-    required: true
+    description: "App-Specific Password from appleid.apple.com (read from secure OpenClaw env, can be persisted to system keyring by setup)"
+    required: false
     secure: true
     placeholder: "xxxx-xxxx-xxxx-xxxx"
   
@@ -117,14 +115,34 @@ environment:
   - name: LOG_LEVEL
     description: "Logging level (DEBUG, INFO, WARNING, ERROR)"
     required: false
-    default: "INFO"
+    default: "WARNING"
+
+  - name: ICALENDAR_SYNC_CONFIG
+    description: "Optional path to YAML credential file (username/app_password)"
+    required: false
+    default: "~/.openclaw/icalendar-sync.yaml"
+
+  - name: ICALENDAR_SYNC_USER_AGENT
+    description: "Optional custom User-Agent for iCloud CalDAV requests"
+    required: false
+    default: "macOS/14.0.0 (23A344) CalendarAgent/954"
+
+  - name: ICALENDAR_SYNC_DEBUG_HTTP
+    description: "Enable detailed auth/network diagnostics (1/true/yes/on)"
+    required: false
+    default: "0"
+
+  - name: ICALENDAR_SYNC_STORAGE
+    description: "Credential source override for CalDAV provider (auto/keyring/env/file)"
+    required: false
+    default: "auto"
 
 
 # =============================================================================
 # SECURITY
 # =============================================================================
 security:
-  credential_storage: "System keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service)"
+  credential_storage: "System keyring or explicit YAML config file (0600) for headless/GUI-restricted runtimes"
   input_validation: true
   rate_limiting: "10 calls per 60 seconds"
   ssl_verification: true
@@ -145,30 +163,30 @@ capabilities:
 commands:
   - name: list
     description: List accessible iCloud calendars
-    usage: "icalendar-sync list"
+    usage: "icalendar-sync list [--provider auto|caldav|macos-native] [--storage auto|keyring|env|file] [--config /path/to/config.yaml]"
     permissions: [read]
   
   - name: get
     description: Sync and retrieve calendar events
-    usage: "icalendar-sync get --calendar <name> [--days 7]"
+    usage: "icalendar-sync get --calendar <name> [--days 7] [--provider auto|caldav|macos-native] [--storage auto|keyring|env|file] [--config /path/to/config.yaml]"
     permissions: [read]
   
   - name: create
     description: Create a new calendar event
-    usage: "icalendar-sync create --calendar <name> --json <data>"
+    usage: "icalendar-sync create --calendar <name> --json <data> [--provider auto|caldav|macos-native] [--storage auto|keyring|env|file] [--config /path/to/config.yaml]"
     permissions: [create]
 
   - name: update
     description: Update existing calendar event with smart recurrence handling
-    usage: "icalendar-sync update --calendar <name> --uid <uid> --json <data> [--recurrence-id <datetime>] [--mode single|all|future]"
+    usage: "icalendar-sync update --calendar <name> --uid <uid> --json <data> [--recurrence-id <datetime>] [--mode single|all|future] [--provider auto|caldav|macos-native] [--storage auto|keyring|env|file] [--config /path/to/config.yaml]"
     permissions: [update]
 
   - name: delete
     description: Remove event from calendar
-    usage: "icalendar-sync delete --calendar <name> --uid <uid>"
+    usage: "icalendar-sync delete --calendar <name> --uid <uid> [--provider auto|caldav|macos-native] [--storage auto|keyring|env|file] [--config /path/to/config.yaml]"
     permissions: [delete]
   
   - name: setup
     description: Configure iCloud credentials interactively or via CLI
-    usage: "icalendar-sync setup [--username EMAIL] [--password PWD] [--non-interactive]"
+    usage: "icalendar-sync setup [--username EMAIL] [--non-interactive] [--storage keyring|file] [--config /path/to/config.yaml]"
     permissions: [admin]
