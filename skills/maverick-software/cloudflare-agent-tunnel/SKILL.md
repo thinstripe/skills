@@ -4,9 +4,9 @@ description: >
   Give each OpenClaw agent its own secure HTTPS URL using Cloudflare Tunnel (cloudflared). No SSL
   certificates to manage, no ports to expose publicly. Use when setting up secure cloud access for
   OpenClaw agents on a VPS, assigning per-agent subdomains (koda.yourdomain.com), enabling HTTPS
-  without nginx or Let's Encrypt, or connecting a custom domain to an agent. Covers quick tunnels
-  (no account, instant URL), named tunnels (permanent URL, free Cloudflare account), multi-agent
-  setup on a single VPS, and custom domain configuration.
+  without nginx or Let's Encrypt, or connecting a custom domain to an agent. Covers named tunnels
+  (permanent URL, free Cloudflare account — preferred), quick tunnels (temporary, no account),
+  multi-agent setup on a single VPS, and custom domain configuration.
 ---
 
 # Cloudflare Agent Tunnel
@@ -31,74 +31,74 @@ User → https://koda.yourdomain.com
 
 ---
 
-## Option 1 — Quick Tunnel (No Account, Instant)
+## ✅ Preferred Method — Named Tunnel (Permanent, Free Cloudflare Account)
 
-For testing or temporary access. URL is random and resets on restart.
+**Always use this method.** Gives a permanent URL tied to your domain. Requires a free Cloudflare account — takes 2 minutes to set up.
+
+### Step 1: Install cloudflared
 
 ```bash
-# Install cloudflared
 curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
 echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" \
   | tee /etc/apt/sources.list.d/cloudflared.list
 apt-get update -qq && apt-get install -y cloudflared
-
-# Start quick tunnel — prints a random https://*.trycloudflare.com URL
-cloudflared tunnel --url http://localhost:18789 --no-autoupdate
 ```
 
-Use the automated script:
+### Step 2: Authenticate — give the user this URL
+
+Run on the VPS:
 ```bash
-./scripts/tunnel-setup.sh --agent koda --port 18789 --quick
+cloudflared tunnel login
 ```
 
----
+This prints a Cloudflare auth URL. **Give that URL to the user** — they open it in their browser, log into their Cloudflare account, and click Authorize. This saves `/root/.cloudflared/cert.pem` on the VPS.
 
-## Option 2 — Named Tunnel (Permanent, Free Cloudflare Account)
-
-Permanent URL. Requires a free Cloudflare account and a domain.
-
-### Step 1: Authenticate
-
+Poll for completion:
 ```bash
-cloudflared login
-# Opens a browser URL — authorize your domain
-# Saves /root/.cloudflared/cert.pem
+# Wait until cert.pem appears (user has authorized)
+until [ -f /root/.cloudflared/cert.pem ]; do sleep 3; done && echo "Authorized!"
 ```
 
-### Step 2: Create tunnel
+### Step 3: Create the tunnel
 
 ```bash
 cloudflared tunnel create openclaw-koda
-# Outputs UUID — save it
+# Outputs a UUID — note it
+TUNNEL_UUID=$(cloudflared tunnel list --output json | python3 -c \
+  "import json,sys; t=[x for x in json.load(sys.stdin) if x['name']=='openclaw-koda']; print(t[0]['id'])")
 ```
 
-### Step 3: Write config
+### Step 4: Write tunnel config
 
-`/etc/cloudflared/openclaw-koda.yml`:
-```yaml
-tunnel: <UUID>
-credentials-file: /root/.cloudflared/<UUID>.json
+```bash
+mkdir -p /etc/cloudflared
+cat > /etc/cloudflared/openclaw-koda.yml << EOF
+tunnel: ${TUNNEL_UUID}
+credentials-file: /root/.cloudflared/${TUNNEL_UUID}.json
 
 ingress:
   - hostname: koda.yourdomain.com
     service: http://localhost:18789
   - service: http_status:404
+EOF
 ```
 
-### Step 4: Route DNS
+### Step 5: Route DNS
 
 ```bash
 cloudflared tunnel route dns openclaw-koda koda.yourdomain.com
-# Creates CNAME: koda.yourdomain.com → <UUID>.cfargotunnel.com
+# Automatically creates CNAME: koda.yourdomain.com → <UUID>.cfargotunnel.com
 ```
 
-### Step 5: Install as systemd service
+The domain must use **Cloudflare nameservers**. If it doesn't yet, the user transfers DNS management to Cloudflare (free, takes ~5 min).
+
+### Step 6: Install as systemd service
 
 ```bash
 cat > /etc/systemd/system/cloudflared-koda.service << 'EOF'
 [Unit]
-Description=Cloudflare Tunnel — koda
-After=network.target
+Description=Cloudflare Tunnel — openclaw-koda
+After=network.target openclaw.service
 
 [Service]
 Type=simple
@@ -114,18 +114,56 @@ EOF
 systemctl daemon-reload
 systemctl enable cloudflared-koda
 systemctl start cloudflared-koda
+systemctl is-active cloudflared-koda
 ```
 
-Or use the automated script:
+### Step 7: Update OpenClaw allowedOrigins
+
+```json
+"gateway": {
+  "controlUi": {
+    "allowedOrigins": [
+      "http://localhost:18789",
+        "https://koda.yourdomain.com"
+    ]
+  }
+}
+```
+
+Then: `systemctl restart openclaw-koda`
+
+### Step 8: Lock down the port
+
+Block direct public access — all traffic must go through the tunnel:
 ```bash
-./scripts/tunnel-setup.sh --agent koda --port 18789 --domain koda.yourdomain.com
+ufw deny 18789
+ufw reload
+```
+
+---
+
+## Quick Tunnel (Fallback Only — Temporary)
+
+> ⚠️ **Use only as a temporary fallback** when no domain is available. The URL is random and resets every time the service restarts. Switch to a named tunnel as soon as a domain is ready.
+
+```bash
+# Start quick tunnel — prints a random https://*.trycloudflare.com URL
+cloudflared tunnel --url http://localhost:18789 --no-autoupdate
+
+# Or as a systemd service (URL logged to /var/log/cloudflared-openclaw.log)
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate --url http://localhost:18789
+```
+
+Read the assigned URL:
+```bash
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /var/log/cloudflared-openclaw.log | tail -1
 ```
 
 ---
 
 ## Multi-Agent Setup (One VPS, Multiple Agents)
 
-Each agent = one OpenClaw gateway + one Cloudflare tunnel, both as separate systemd services.
+Each agent = one OpenClaw gateway port + one named tunnel + one systemd service.
 
 ```
 Port 18789 → openclaw-koda.service   + cloudflared-koda.service   → koda.yourdomain.com
@@ -133,57 +171,32 @@ Port 18790 → openclaw-alex.service   + cloudflared-alex.service   → alex.you
 Port 18791 → openclaw-jordan.service + cloudflared-jordan.service → jordan.yourdomain.com
 ```
 
-**Critical:** Do NOT use `cloudflared service install` for multiple agents — it only supports one tunnel and overwrites the system service. Always write systemd service files manually (as above) for each agent.
-
-```bash
-# Add each agent sequentially
-./scripts/tunnel-setup.sh --agent alex   --port 18790 --domain alex.yourdomain.com
-./scripts/tunnel-setup.sh --agent jordan --port 18791 --domain jordan.yourdomain.com
-```
-
----
-
-## Update OpenClaw allowedOrigins
-
-After setting up a tunnel, add the HTTPS URL to the agent's openclaw.json — otherwise the UI blocks the connection:
-
-```json
-"gateway": {
-  "controlUi": {
-    "allowedOrigins": [
-      "http://localhost:18789",
-      "https://koda.yourdomain.com"
-    ]
-  }
-}
-```
-
-Then restart the agent: `systemctl restart openclaw-koda`
+**Critical:** Do NOT use `cloudflared service install` for multiple agents — it only supports one tunnel and overwrites the system service. Always write individual systemd service files per agent.
 
 ---
 
 ## Custom Domains
 
-Full walkthrough for adding a domain, Cloudflare nameservers, per-agent subdomains, and DNS record management: see `references/custom-domains.md`.
-
 Key facts:
-- Domain must use **Cloudflare nameservers** (transfer DNS to Cloudflare — free)
-- Cloudflare issues and renews TLS certs automatically
+- Domain must use **Cloudflare nameservers** (transfer at your registrar — free)
+- Cloudflare issues and auto-renews TLS certs
 - CNAME records created automatically via `cloudflared tunnel route dns`
-- Free Cloudflare plan supports unlimited tunnels and unlimited bandwidth
+- Free Cloudflare plan: unlimited tunnels, unlimited bandwidth
+
+See `references/custom-domains.md` for a full walkthrough.
 
 ---
 
 ## Managing Tunnels
 
 ```bash
-# Status of all tunnels
+# Status
 systemctl list-units "cloudflared-*" --no-pager
 
 # Logs
 journalctl -u cloudflared-koda -f
 
-# List all named tunnels (requires cloudflared login)
+# List named tunnels
 cloudflared tunnel list
 
 # Delete a tunnel
