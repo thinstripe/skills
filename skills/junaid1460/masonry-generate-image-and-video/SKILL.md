@@ -135,3 +135,12 @@ masonry history pending --sync            # Sync pending jobs
 - Never run `masonry login` without `--remote` or `--token` (browser login won't work headless).
 - If a job is pending, wait `check_after_seconds` before checking again.
 - All output is JSON. Parse it, don't guess.
+
+## Feedback
+
+Report issues or suggest improvements at: https://github.com/masonry-so/skills/issues
+
+When filing an issue, include:
+- **What was your intent?** What were you trying to accomplish?
+- **What worked?** Which parts behaved as expected?
+- **What needs improvement?** What went wrong or could be better?

@@ -3,11 +3,16 @@
   "slug": "masonry-generate-image-and-video",
   "displayName": "Masonry: generate images and video with models across providers",
   "latest": {
-    "version": "1.1.5",
-    "publishedAt": 1772691364116,
-    "commit": "https://github.com/openclaw/skills/commit/ec2d6a22ad8dd345b9b1526d5c5e65e536e2cacc"
+    "version": "1.1.6",
+    "publishedAt": 1772692166560,
+    "commit": null
   },
   "history": [
+    {
+      "version": "1.1.5",
+      "publishedAt": 1772691364116,
+      "commit": "https://github.com/openclaw/skills/commit/ec2d6a22ad8dd345b9b1526d5c5e65e536e2cacc"
+    },
     {
       "version": "1.0.1",
       "publishedAt": 1770203163024,
