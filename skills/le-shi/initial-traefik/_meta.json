@@ -1,0 +1,11 @@
+{
+  "owner": "le-shi",
+  "slug": "initial-traefik",
+  "displayName": "initial-traefik",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1772602726524,
+    "commit": null
+  },
+  "history": []
+}
