@@ -56,7 +56,17 @@ The bridge response should include at least:
 Use in ClawPulse:
 - URL: `http://<tailscale-or-lan-ip>:8787/health`
 - Token: Bearer token from setup script
-- Polling default: 10s
+- Polling default: 5s (more responsive)
+
+## Monitor mode (recommended)
+Use monitor as the public endpoint, keep bridge as internal source.
+
+```bash
+# Start/restart monitor (reads bridge and applies anti-flap state machine)
+bash scripts/setup_clawpulse_monitor.sh --apply
+```
+
+Then configure app with monitor endpoint/token (from script output or QR), not bridge token.
 
 ## Troubleshooting
 - HTTP blocked on iOS: ensure app Info.plist has ATS exception for development, or use HTTPS.

@@ -3,11 +3,16 @@
   "slug": "clawpulse-bridge",
   "displayName": "Clawpulse Bridge",
   "latest": {
-    "version": "2.0.0",
-    "publishedAt": 1772721478888,
-    "commit": "https://github.com/openclaw/skills/commit/caada32f9257eef1077821845210aa879826b3a2"
+    "version": "2.0.2",
+    "publishedAt": 1772728279768,
+    "commit": null
   },
   "history": [
+    {
+      "version": "2.0.0",
+      "publishedAt": 1772721478888,
+      "commit": "https://github.com/openclaw/skills/commit/caada32f9257eef1077821845210aa879826b3a2"
+    },
     {
       "version": "1.0.4",
       "publishedAt": 1772686016364,
