@@ -1,0 +1,11 @@
+{
+  "owner": "alexbrc20",
+  "slug": "news-sentiment",
+  "displayName": "News Sentiment",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1772773024525,
+    "commit": null
+  },
+  "history": []
+}
