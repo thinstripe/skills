@@ -3,9 +3,15 @@
   "slug": "agent-teams",
   "displayName": "Agent Teams",
   "latest": {
-    "version": "1.8.1",
-    "publishedAt": 1772601731750,
-    "commit": "https://github.com/openclaw/skills/commit/57f97591191603b1f48b96e943296d3a092f5d76"
+    "version": "1.10.5",
+    "publishedAt": 1772811627192,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.8.1",
+      "publishedAt": 1772601731750,
+      "commit": "https://github.com/openclaw/skills/commit/57f97591191603b1f48b96e943296d3a092f5d76"
+    }
+  ]
 }
