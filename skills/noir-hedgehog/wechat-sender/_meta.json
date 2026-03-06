@@ -1,0 +1,11 @@
+{
+  "owner": "noir-hedgehog",
+  "slug": "wechat-sender",
+  "displayName": "Wechat Sender",
+  "latest": {
+    "version": "1.0.1",
+    "publishedAt": 1772731970153,
+    "commit": null
+  },
+  "history": []
+}
