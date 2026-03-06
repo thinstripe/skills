@@ -16,6 +16,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const MomentDetector = require('./moment-detector.js');
 
 class DailyReview {
   constructor(basePath = '/root/openclaw/memory') {
@@ -26,6 +27,9 @@ class DailyReview {
     this.knowledgeFile = path.join(basePath, 'knowledge-base.md');
     this.memoryFile = path.join(basePath, '..', 'MEMORY.md');
     this.indexFile = path.join(basePath, 'memory-index.json');
+    
+    // 初始化重要时刻检测器
+    this.momentDetector = new MomentDetector();
   }
 
   /**
@@ -39,10 +43,11 @@ class DailyReview {
     console.log(`📂 找到 ${dailyFiles.length} 个每日记忆文件\n`);
 
     // 2. 分析每个文件，提取关键信息
-    const extractedData = this.analyzeFiles(dailyFiles);
+    const extractedData = await this.analyzeFiles(dailyFiles);
     console.log(`📊 提取到 ${extractedData.projects.length} 个项目进展`);
     console.log(`💡 提取到 ${extractedData.lessons.length} 条经验教训`);
-    console.log(`💖 提取到 ${extractedData.moments.length} 个温暖瞬间\n`);
+    console.log(`💖 提取到 ${extractedData.moments.length} 个温暖瞬间`);
+    console.log(`🌟 提取到 ${extractedData.criticalMoments.length} 个重要时刻\n`);
 
     // 3. 更新情感记忆
     this.updateEmotionMemory(extractedData);
@@ -53,7 +58,7 @@ class DailyReview {
     console.log('✅ 知识库已更新\n');
 
     // 5. 更新核心记忆（重要对话和决策）
-    this.updateCoreMemory(extractedData);
+    await this.updateCoreMemory(extractedData);
     console.log('✅ 核心记忆已更新\n');
 
     // 6. 更新记忆索引
@@ -68,7 +73,7 @@ class DailyReview {
   }
 
   /**
-   * 读取所有 daily 文件
+   * 读取所有 daily 文件（JSONL 格式）
    */
   readDailyFiles() {
     if (!fs.existsSync(this.dailyPath)) {
@@ -76,28 +81,68 @@ class DailyReview {
     }
 
     const files = fs.readdirSync(this.dailyPath)
-      .filter(f => f.endsWith('.md'))
+      .filter(f => f.endsWith('.jsonl'))
       .map(filename => {
         const filepath = path.join(this.dailyPath, filename);
         const content = fs.readFileSync(filepath, 'utf-8');
-        const date = filename.replace('.md', '');
         
-        return { filename, filepath, content, date };
+        // 从文件名提取日期（格式：sessionId_YYYYMMDD_HHMMSS.jsonl）
+        const match = filename.match(/_(\d{8})_\d{6}\.jsonl$/);
+        const date = match ? match[1] : filename.replace('.jsonl', '');
+        
+        // 解析 JSONL 内容为消息数组
+        const messages = content.split('\n')
+          .filter(line => line.trim())
+          .map(line => {
+            try {
+              return JSON.parse(line);
+            } catch (e) {
+              return null;
+            }
+          })
+          .filter(msg => msg !== null);
+        
+        return { filename, filepath, content, date, messages };
       });
 
     return files;
   }
 
   /**
+   * 从消息中提取上下文（前后各 5 行）
+   * @param {Array} messages - 所有消息数组
+   * @param {number} currentIndex - 当前消息索引
+   * @returns {Object} 上下文信息
+   */
+  extractContext(messages, currentIndex) {
+    const start = Math.max(0, currentIndex - 5);
+    const end = Math.min(messages.length, currentIndex + 6);
+    
+    const contextMessages = messages.slice(start, end);
+    const contextText = contextMessages
+      .map(msg => this.extractTextFromMessage(msg))
+      .filter(text => text)
+      .join('\n');
+    
+    return {
+      before: messages.slice(start, currentIndex).map(msg => this.extractTextFromMessage(msg)).filter(t => t),
+      current: this.extractTextFromMessage(messages[currentIndex]),
+      after: messages.slice(currentIndex + 1, end).map(msg => this.extractTextFromMessage(msg)).filter(t => t),
+      fullContext: contextText
+    };
+  }
+
+  /**
    * 分析文件内容，提取关键信息
    */
-  analyzeFiles(files) {
+  async analyzeFiles(files) {
     const data = {
       projects: [],
       lessons: [],
       moments: [],
       decisions: [],
-      preferences: []
+      preferences: [],
+      criticalMoments: []  // 重要时刻
     };
 
     // 关键词匹配规则
@@ -136,58 +181,108 @@ class DailyReview {
       ]
     };
 
-    files.forEach(file => {
-      const lines = file.content.split('\n');
-      
-      lines.forEach((line, index) => {
+    for (const file of files) {
+      // 处理 JSONL 消息数组
+      for (let index = 0; index < file.messages.length; index++) {
+        const msg = file.messages[index];
+        const text = this.extractTextFromMessage(msg);
+        if (!text) continue;
+        
+        // 使用 moment-detector 检测重要时刻
+        if (msg.role === 'user') {
+          const momentResult = await this.momentDetector.detect(text);
+          if (momentResult && momentResult.matched) {
+            const context = this.extractContext(file.messages, index);
+            data.criticalMoments.push({
+              date: file.date,
+              content: text.trim(),
+              source: file.filename,
+              role: msg.role,
+              timestamp: msg.timestamp,
+              momentType: momentResult.type,
+              suggestion: momentResult.suggestion,
+              confidence: momentResult.confidence,
+              context: context
+            });
+          }
+        }
+        
         // 项目进展
-        if (patterns.project.some(p => p.test(line))) {
+        if (patterns.project.some(p => p.test(text))) {
           data.projects.push({
             date: file.date,
-            content: line.trim(),
-            source: file.filename
+            content: text.trim(),
+            source: file.filename,
+            role: msg.role,
+            timestamp: msg.timestamp
           });
         }
 
         // 经验教训
-        if (patterns.lesson.some(p => p.test(line))) {
+        if (patterns.lesson.some(p => p.test(text))) {
           data.lessons.push({
             date: file.date,
-            content: line.trim(),
-            source: file.filename
+            content: text.trim(),
+            source: file.filename,
+            role: msg.role,
+            timestamp: msg.timestamp
           });
         }
 
         // 温暖瞬间
-        if (patterns.moment.some(p => p.test(line))) {
+        if (patterns.moment.some(p => p.test(text))) {
           data.moments.push({
             date: file.date,
-            content: line.trim(),
-            source: file.filename
+            content: text.trim(),
+            source: file.filename,
+            role: msg.role,
+            timestamp: msg.timestamp
           });
         }
 
         // 重要决策
-        if (patterns.decision.some(p => p.test(line))) {
+        if (patterns.decision.some(p => p.test(text))) {
           data.decisions.push({
             date: file.date,
-            content: line.trim(),
-            source: file.filename
+            content: text.trim(),
+            source: file.filename,
+            role: msg.role,
+            timestamp: msg.timestamp
           });
         }
 
         // 用户偏好
-        if (patterns.preference.some(p => p.test(line))) {
+        if (patterns.preference.some(p => p.test(text))) {
           data.preferences.push({
             date: file.date,
-            content: line.trim(),
-            source: file.filename
+            content: text.trim(),
+            source: file.filename,
+            role: msg.role,
+            timestamp: msg.timestamp
           });
         }
-      });
-    });
+      }
+    }
 
     return data;
+  }
+
+  /**
+   * 从消息对象中提取文本内容
+   */
+  extractTextFromMessage(msg) {
+    if (!msg.content) return '';
+    
+    // 处理数组格式的内容
+    if (Array.isArray(msg.content)) {
+      return msg.content
+        .filter(item => item.type === 'text')
+        .map(item => item.text || '')
+        .join(' ');
+    }
+    
+    // 处理字符串格式的内容
+    return String(msg.content);
   }
 
   /**
@@ -226,6 +321,32 @@ class DailyReview {
       });
     });
 
+    // 处理 criticalMoments 中的情感交流和家庭信息
+    data.criticalMoments.forEach(moment => {
+      if (moment.momentType === 'emotional' || moment.momentType === 'family') {
+        if (!emotion.Amber.warmMoments) emotion.Amber.warmMoments = [];
+        
+        emotion.Amber.warmMoments.push({
+          date: moment.date,
+          content: moment.content,
+          type: moment.momentType,
+          confidence: moment.confidence,
+          context: moment.context?.fullContext?.substring(0, 500)
+        });
+      }
+      
+      // 处理用户偏好
+      if (moment.momentType === 'preference') {
+        if (!emotion.Amber.preferences) emotion.Amber.preferences = {};
+        const prefId = 'pref_' + Date.now();
+        emotion.Amber.preferences[prefId] = {
+          content: moment.content,
+          date: moment.date,
+          confidence: moment.confidence
+        };
+      }
+    });
+
     // 更新时间
     emotion.lastUpdated = new Date().toISOString();
 
@@ -237,26 +358,78 @@ class DailyReview {
    * 更新知识库
    */
   updateKnowledgeBase(data) {
-    if (data.lessons.length === 0) return;
-
     const today = new Date().toISOString().split('T')[0];
-    const newSection = `\n## ${today} 新增经验\n\n`;
+    let hasNewContent = false;
+    const newSections = [];
 
-    data.lessons.forEach((lesson, index) => {
-      newSection += `### ${index + 1}. ${lesson.content}\n\n`;
-    });
+    // 处理经验教训
+    if (data.lessons.length > 0) {
+      hasNewContent = true;
+      const lessonSection = `\n## ${today} 新增经验\n\n`;
+      data.lessons.forEach((lesson, index) => {
+        newSections.push(`${lessonSection}### ${index + 1}. ${lesson.content}\n\n`);
+      });
+    }
 
-    // 追加到知识库
-    fs.appendFileSync(this.knowledgeFile, newSection, 'utf-8');
+    // 处理 criticalMoments 中的经验教训
+    const lessonMoments = data.criticalMoments.filter(m => m.momentType === 'lesson');
+    if (lessonMoments.length > 0) {
+      hasNewContent = true;
+      const criticalSection = `\n## ${today} 重要洞察\n\n`;
+      lessonMoments.forEach((moment, index) => {
+        newSections.push(`${criticalSection}### ${index + 1}. ${moment.content}\n\n**分类**: ${moment.suggestion?.category || '经验总结'}\n**置信度**: ${moment.confidence}\n\n`);
+      });
+    }
+
+    if (hasNewContent) {
+      // 追加到知识库
+      fs.appendFileSync(this.knowledgeFile, newSections.join(''), 'utf-8');
+    }
   }
 
   /**
    * 更新核心记忆
    */
-  updateCoreMemory(data) {
-    // 重要决策和对话应该更新到 MEMORY.md
-    // 这里简化处理，实际应该解析 Markdown 并插入到合适位置
-    console.log('📝 核心记忆更新（简化版）- 重要决策和对话已记录');
+  async updateCoreMemory(data) {
+    // 引入 MemoryManager 来处理核心记忆更新
+    const MemoryManager = require('./memory-manager.js');
+    const manager = new MemoryManager(this.basePath);
+
+    // 处理 criticalMoments
+    const criticalMoments = data.criticalMoments.filter(m => 
+      m.suggestion?.memoryType === 'core' || 
+      ['emotional', 'family', 'philosophy', 'promise'].includes(m.momentType)
+    );
+
+    for (const moment of criticalMoments) {
+      const category = moment.suggestion?.category || moment.momentType || '重要对话';
+      
+      await manager.updateMemory({
+        content: moment.content,
+        type: 'core',
+        category: category,
+        importance: moment.suggestion?.importance || 'high',
+        tags: [moment.momentType, 'critical-moment'],
+        title: `${category} - ${moment.date}`,
+        date: moment.date
+      });
+
+      console.log(`  ✅ 核心记忆：${category} - ${moment.content.substring(0, 30)}...`);
+    }
+
+    // 处理重要决策
+    data.decisions.forEach(decision => {
+      manager.updateMemory({
+        content: decision.content,
+        type: 'core',
+        category: '重要决策',
+        importance: 'high',
+        tags: ['决策', '重要'],
+        title: `决策 - ${decision.date}`,
+        date: decision.date
+      });
+      console.log(`  ✅ 核心记忆：重要决策 - ${decision.content.substring(0, 30)}...`);
+    });
   }
 
   /**
@@ -313,12 +486,12 @@ class DailyReview {
   }
 
   /**
-   * 归档 7 天前的文件
+   * 归档 30 天前的文件（与 daily-session-backup.js 保持一致）
    */
   archiveOldFiles() {
     const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - 7);
-    const cutoffStr = cutoffDate.toISOString().split('T')[0];
+    cutoffDate.setDate(cutoffDate.getDate() - 30);
+    const cutoffStr = cutoffDate.toISOString().split('T')[0].replace(/-/g, '');
 
     console.log(`📅 归档 ${cutoffStr} 前的文件...`);
 
@@ -328,11 +501,15 @@ class DailyReview {
     let archived = 0;
 
     files.forEach(file => {
-      if (!file.endsWith('.md')) return;
+      if (!file.endsWith('.jsonl')) return;
 
-      const dateStr = file.replace('.md', '');
-      if (dateStr < cutoffStr) {
-        this.archiveFile(dateStr);
+      // 从文件名提取日期（格式：sessionId_YYYYMMDD_HHMMSS.jsonl）
+      const match = file.match(/_(\d{8})_\d{6}\.jsonl$/);
+      if (!match) return;
+
+      const fileDate = match[1];
+      if (fileDate < cutoffStr) {
+        this.archiveFile(file, fileDate);
         archived++;
       }
     });
@@ -341,11 +518,11 @@ class DailyReview {
   }
 
   /**
-   * 归档单个文件
+   * 归档单个文件（JSONL 格式）
    */
-  archiveFile(dateStr) {
-    const dailyFile = path.join(this.dailyPath, `${dateStr}.md`);
-    const monthDir = path.join(this.archivePath, dateStr.substring(0, 7));
+  archiveFile(filename, fileDate) {
+    const dailyFile = path.join(this.dailyPath, filename);
+    const monthDir = path.join(this.archivePath, fileDate.substring(0, 6));
     
     if (!fs.existsSync(dailyFile)) return;
 
@@ -355,29 +532,29 @@ class DailyReview {
     }
 
     // 移动文件
-    const archiveFile = path.join(monthDir, `${dateStr}.md`);
+    const archiveFile = path.join(monthDir, filename);
     fs.renameSync(dailyFile, archiveFile);
 
     // 更新索引
-    this.markAsArchived(dateStr);
+    this.markAsArchived(filename, fileDate);
 
-    console.log(`  📦 ${dateStr} → archive/${dateStr.substring(0, 7)}/`);
+    console.log(`  📦 ${filename} → archive/${fileDate.substring(0, 6)}/`);
   }
 
   /**
    * 标记为已归档
    */
-  markAsArchived(dateStr) {
+  markAsArchived(filename, fileDate) {
     if (!fs.existsSync(this.indexFile)) return;
 
     const index = JSON.parse(fs.readFileSync(this.indexFile, 'utf-8'));
+    const monthDir = fileDate.substring(0, 6);
     
     index.entries.forEach(entry => {
-      if (entry.date === dateStr) {
+      if (entry.location && entry.location.file && entry.location.file.includes(filename)) {
         entry.archived = true;
-        const monthDir = dateStr.substring(0, 7);
         entry.location.type = 'archive';
-        entry.location.file = `archive/${monthDir}/${dateStr}.md`;
+        entry.location.file = `archive/${monthDir}/${filename}`;
       }
     });
 

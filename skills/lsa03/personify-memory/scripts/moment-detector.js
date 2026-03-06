@@ -8,6 +8,13 @@
 
 class MomentDetector {
   constructor() {
+    // 语义分析配置
+    this.semanticAnalysis = {
+      enabled: true,
+      threshold: 0.6,  // 语义相关度阈值
+      provider: 'bailian'
+    };
+
     // 重要时刻识别规则
     this.rules = {
       // 情感交流
@@ -76,8 +83,8 @@ class MomentDetector {
         patterns: [
           /我 (喜欢 | 爱).*不 (喜欢 | 爱)/i,
           /我习惯/i,
-          /我不太.*i,
-          /比较.*i
+          /我不太.*/i,
+          /比较.*/i
         ],
         suggestType: 'emotion',
         suggestCategory: '用户偏好',
@@ -88,11 +95,11 @@ class MomentDetector {
       lesson: {
         keywords: ['经验', '教训', '注意', '方法', '技巧', '方案', '解决', '问题', 'Bug', '错误'],
         patterns: [
-          /我发现.*i,
-          /问题是.*i,
-          /解决方法.*i,
-          /不要.*i,  // "不要输出长文本"
-          /应该.*i
+          /我发现.*/i,
+          /问题是.*/i,
+          /解决方法.*/i,
+          /不要.*/i,  // "不要输出长文本"
+          /应该.*/i
         ],
         suggestType: 'knowledge',
         suggestCategory: '经验总结',
@@ -106,7 +113,7 @@ class MomentDetector {
           /已经.*了/i,
           /完成了/i,
           /配置.*成功/i,
-          /搞定.*i
+          /搞定.*/i
         ],
         suggestType: 'daily',
         suggestCategory: '项目进展',
@@ -127,28 +134,76 @@ class MomentDetector {
   }
 
   /**
-   * 检测消息是否包含重要时刻
+   * 分层检测：第一层关键词匹配 + 第二层语义分析
    * @param {string} message - 消息内容
    * @param {Object} context - 上下文信息（可选）
    * @returns {Object|null} 检测结果，如果不是重要时刻返回 null
    */
-  detect(message, context = {}) {
+  async detect(message, context = {}) {
     if (!message || typeof message !== 'string') {
       return null;
     }
 
     const trimmedMessage = message.trim();
+
+    // ===== 第一层：关键词 + 正则匹配（快速）=====
+    const layer1Result = this.layer1KeywordMatch(trimmedMessage);
+    
+    if (!layer1Result.matched) {
+      // 关键词和正则都没匹配，直接返回，跳过失义分析
+      console.log(`  ⏭️ 跳过语义分析：${trimmedMessage.substring(0, 30)}...`);
+      return null;
+    }
+    
+    console.log(`  ✅ 第一层匹配：${layer1Result.type} (score: ${layer1Result.score})`);
+    
+    // ===== 第二层：语义分析（精确）=====
+    if (this.semanticAnalysis.enabled) {
+      const layer2Result = await this.layer2SemanticAnalysis(trimmedMessage, layer1Result);
+      
+      if (layer2Result.relevance < this.semanticAnalysis.threshold) {
+        console.log(`  ❌ 语义分析未通过：相关度 ${layer2Result.relevance} < ${this.semanticAnalysis.threshold}`);
+        return null;
+      }
+      
+      console.log(`  ✅ 语义分析通过：相关度 ${layer2Result.relevance}`);
+      
+      // 合并两层结果
+      return {
+        ...layer1Result,
+        semanticRelevance: layer2Result.relevance,
+        finalScore: layer1Result.score * layer2Result.relevance,
+        confidence: layer2Result.relevance >= 0.8 ? 'high' : 'medium',
+        semanticReasoning: layer2Result.reasoning
+      };
+    }
+    
+    // 语义分析未启用，返回第一层结果
+    return {
+      ...layer1Result,
+      finalScore: layer1Result.score,
+      confidence: layer1Result.score >= 5 ? 'high' : 'medium'
+    };
+  }
+
+  /**
+   * 第一层：关键词 + 正则匹配
+   * @param {string} message - 消息内容
+   * @returns {Object} 匹配结果
+   */
+  layer1KeywordMatch(message) {
     const results = [];
 
     // 检查每条规则
     for (const [type, rule] of Object.entries(this.rules)) {
-      const score = this.calculateScore(trimmedMessage, rule);
+      const score = this.calculateScore(message, rule);
       
       if (score > 0) {
         results.push({
+          matched: true,
           type,
           score,
-          matched: this.getMatchedDetails(trimmedMessage, rule),
+          matchedDetails: this.getMatchedDetails(message, rule),
           suggestion: {
             memoryType: rule.suggestType,
             category: rule.suggestCategory,
@@ -159,14 +214,146 @@ class MomentDetector {
       }
     }
 
-    // 如果没有匹配，返回 null
+    // 如果没有匹配，返回未匹配
     if (results.length === 0) {
-      return null;
+      return { matched: false };
     }
 
     // 按分数排序，返回最佳匹配
     results.sort((a, b) => b.score - a.score);
     return results[0];
+  }
+
+  /**
+   * 第二层：语义分析
+   * @param {string} message - 消息内容
+   * @param {Object} layer1Result - 第一层匹配结果
+   * @returns {Object} 语义分析结果
+   */
+  async layer2SemanticAnalysis(message, layer1Result) {
+    const prompt = this.buildSemanticPrompt(message, layer1Result);
+    
+    try {
+      // 调用 Bailian API 进行语义分析
+      const response = await this.callModelAPI(prompt);
+      
+      return {
+        relevance: response.relevance || 0.7,
+        reasoning: response.reasoning || '语义分析通过',
+        confidence: response.confidence || 'medium'
+      };
+    } catch (error) {
+      console.error('  ⚠️ 语义分析失败:', error.message);
+      // 降级：语义分析失败时使用默认相关度
+      return { relevance: 0.7, reasoning: '降级使用关键词匹配' };
+    }
+  }
+
+  /**
+   * 构建语义分析 Prompt
+   * @param {string} message - 消息内容
+   * @param {Object} layer1Result - 第一层匹配结果
+   * @returns {string} Prompt
+   */
+  buildSemanticPrompt(message, layer1Result) {
+    const categoryDescriptions = {
+      emotional: '情感交流：表达情感、感谢、温暖、陪伴等情感连接的内容',
+      family: '家庭信息：关于家庭成员、宠物、生日、纪念日等内容',
+      philosophy: '人生哲理：关于人生意义、成长、学习、价值观等哲理性内容',
+      promise: '承诺约定：答应、承诺、约定、保证等内容',
+      preference: '用户偏好：喜欢、不喜欢、习惯、偏好等内容',
+      lesson: '经验教训：经验、教训、注意事项、问题解决方法等内容',
+      milestone: '项目里程碑：完成、成功、上线、配置好等进展内容'
+    };
+
+    return `请分析以下消息是否属于"${layer1Result.type}"类别，并给出相关度评分（0-1）。
+
+消息内容：${message}
+
+类别说明：
+${categoryDescriptions[layer1Result.type] || ''}
+
+请返回 JSON 格式：
+{
+  "relevance": 0.8,  // 相关度（0-1 之间的数字）
+  "reasoning": "简短说明判断理由",
+  "confidence": "high"  // high/medium/low
+}`;
+  }
+
+  /**
+   * 调用模型 API 进行语义分析
+   * 使用 OpenClaw 的 sessions_spawn 调用 Bailian 模型
+   * @param {string} prompt - Prompt
+   * @returns {Promise<Object>} 分析结果
+   */
+  async callModelAPI(prompt) {
+    const { exec } = require('child_process');
+    const util = require('util');
+    const execPromise = util.promisify(exec);
+
+    try {
+      // 使用 OpenClaw CLI 调用模型 API
+      // 通过 sessions_spawn 创建临时会话进行语义分析
+      const command = `openclaw sessions spawn --model bailian/qwen3.5-plus --message "${this.escapeShell(prompt)}"`;
+      
+      const { stdout, stderr } = await execPromise(command, {
+        timeout: 10000,  // 10 秒超时
+        encoding: 'utf-8'
+      });
+
+      if (stderr && !stderr.includes('INFO')) {
+        console.error('  ⚠️ API 调用警告:', stderr);
+      }
+
+      // 解析模型返回的 JSON 结果
+      // 模型返回格式：{ "relevance": 0.8, "reasoning": "...", "confidence": "high" }
+      const response = stdout.trim();
+      
+      // 尝试提取 JSON 部分（模型可能返回额外文本）
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          relevance: parsed.relevance || 0.7,
+          reasoning: parsed.reasoning || '语义分析通过',
+          confidence: parsed.confidence || 'medium'
+        };
+      }
+
+      // 如果没有 JSON，使用默认值
+      return {
+        relevance: 0.7,
+        reasoning: '语义分析通过',
+        confidence: 'medium'
+      };
+
+    } catch (error) {
+      console.error('  ⚠️ 语义分析 API 调用失败:', error.message);
+      
+      // 降级策略：API 失败时使用关键词匹配结果
+      return {
+        relevance: 0.65,
+        reasoning: `降级使用关键词匹配（API 错误：${error.message}）`,
+        confidence: 'low'
+      };
+    }
+  }
+
+  /**
+   * 转义 shell 命令中的特殊字符
+   * @param {string} str - 需要转义的字符串
+   * @returns {string} 转义后的字符串
+   */
+  escapeShell(str) {
+    return str
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\$/g, '\\$')
+      .replace(/`/g, '\\`')
+      .replace(/\n/g, ' ')
+      .replace(/\r/g, ' ')
+      .substring(0, 500);  // 限制长度避免命令过长
   }
 
   /**
@@ -228,9 +415,19 @@ class MomentDetector {
       return false;
     }
 
-    // 分数阈值
-    if (detectionResult.score < 3) {
+    // 使用 finalScore 判断（考虑了语义分析）
+    if (detectionResult.finalScore < 3) {
       return false;
+    }
+
+    // 高置信度强烈推荐
+    if (detectionResult.confidence === 'high' && detectionResult.finalScore >= 5) {
+      return true;
+    }
+
+    // 中等置信度且分数足够也推荐
+    if (detectionResult.confidence === 'medium' && detectionResult.finalScore >= 3) {
+      return true;
     }
 
     // critical 和 high 重要性的都推荐
@@ -252,8 +449,13 @@ class MomentDetector {
       return '';
     }
 
-    const { type, suggestion } = detectionResult;
-    const basePrompt = this.promptTemplates[type] || '💡 这个瞬间我想记住，要记到记忆里吗？';
+    const { type, suggestion, confidence, semanticRelevance } = detectionResult;
+    let basePrompt = this.promptTemplates[type] || '💡 这个瞬间我想记住，要记到记忆里吗？';
+
+    // 根据置信度调整语气
+    if (confidence === 'high') {
+      basePrompt = basePrompt.replace('？', '！（强烈推荐）');
+    }
 
     // 可以添加更多上下文信息
     return basePrompt;
@@ -262,14 +464,14 @@ class MomentDetector {
   /**
    * 批量检测对话历史
    * @param {Array} messages - 消息列表
-   * @returns {Array} 检测结果列表
+   * @returns {Promise<Array>} 检测结果列表
    */
-  detectBatch(messages) {
+  async detectBatch(messages) {
     const results = [];
 
     for (const msg of messages) {
       if (msg.role === 'user') {
-        const result = this.detect(msg.content, {
+        const result = await this.detect(msg.content, {
           timestamp: msg.timestamp,
           messageId: msg.id
         });
@@ -311,26 +513,32 @@ if (typeof module !== 'undefined' && module.exports) {
 
 // CLI usage
 if (require.main === module) {
-  const detector = new MomentDetector();
-  
-  const message = process.argv.slice(2).join(' ');
-  
-  if (!message) {
-    console.log('Usage: node moment-detector.js <message>');
-    console.log('Example: node moment-detector.js "我们是平等的陪伴，不是主仆关系"');
-    process.exit(1);
-  }
+  (async () => {
+    const detector = new MomentDetector();
+    
+    const message = process.argv.slice(2).join(' ');
+    
+    if (!message) {
+      console.log('Usage: node moment-detector.js <message>');
+      console.log('Example: node moment-detector.js "我们是平等的陪伴，不是主仆关系"');
+      process.exit(1);
+    }
 
-  const result = detector.detect(message);
-  
-  if (result) {
-    console.log('✅ 识别到重要时刻:');
-    console.log(JSON.stringify(result, null, 2));
-    console.log(`\n📝 推荐提示：${detector.generatePrompt(result, message)}`);
-    console.log(`🎯 建议记忆类型：${result.suggestion.memoryType}`);
-    console.log(`📂 建议分类：${result.suggestion.category}`);
-    console.log(`⭐ 重要程度：${result.suggestion.importance}`);
-  } else {
-    console.log('ℹ️  未识别到重要时刻');
-  }
+    const result = await detector.detect(message);
+    
+    if (result && result.matched) {
+      console.log('✅ 识别到重要时刻:');
+      console.log(JSON.stringify(result, null, 2));
+      console.log(`\n📝 推荐提示：${detector.generatePrompt(result, message)}`);
+      console.log(`🎯 建议记忆类型：${result.suggestion.memoryType}`);
+      console.log(`📂 建议分类：${result.suggestion.category}`);
+      console.log(`⭐ 重要程度：${result.suggestion.importance}`);
+      console.log(`🎲 置信度：${result.confidence}`);
+      if (result.semanticRelevance) {
+        console.log(`🧠 语义相关度：${result.semanticRelevance}`);
+      }
+    } else {
+      console.log('ℹ️  未识别到重要时刻');
+    }
+  })();
 }

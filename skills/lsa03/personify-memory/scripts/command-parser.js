@@ -10,9 +10,9 @@ class CommandParser {
   constructor() {
     // 记忆指令模式
     this.memoryCommands = [
-      // "记住 XXX"
+      // "记住 XXX"（支持中文逗号、英文逗号、空格或无分隔符）
       {
-        pattern: /记住 (.+)/i,
+        pattern: /记住.*?([^\s,，].+)/i,
         extract: (match) => ({ content: match[1], target: null })
       },
       // "把 XXX 记下来"
@@ -22,12 +22,12 @@ class CommandParser {
       },
       // "不要忘记 XXX"
       {
-        pattern: /不要忘记 (.+)/i,
+        pattern: /不要忘记.*?([^\s,，].+)/i,
         extract: (match) => ({ content: match[1], target: null, importance: 'high' })
       },
       // "这个很重要，记住"
       {
-        pattern: /这个很 (重要 | 关键| 有意义)，记住/i,
+        pattern: /这个很 (重要 | 关键| 有意义) [\s,，]*记住/i,
         extract: (match) => ({ content: '上一段话', target: null, importance: 'high' })
       },
       // "记到 XXX 里"
@@ -37,7 +37,7 @@ class CommandParser {
       },
       // "记入核心记忆/情感记忆/知识库"
       {
-        pattern: /记入 (核心记忆 | 情感记忆 | 知识库 | 每日记忆)/i,
+        pattern: /记入 [\s,，]*(核心记忆 | 情感记忆 | 知识库 | 每日记忆)/i,
         extract: (match) => ({ content: null, target: match[1] })
       },
       // "添加到记忆里"
@@ -143,26 +143,32 @@ class CommandParser {
 
     const lowerContent = content.toLowerCase();
 
-    // 情感相关关键词
+    // 优先级 1：基础设施/重要项目（最高优先级）
+    const infrastructureKeywords = ['到期', '服务器', '域名', '续费', '配置', '部署', '上线', '迁移', '搬家'];
+    if (infrastructureKeywords.some(k => lowerContent.includes(k))) {
+      return 'core';  // 重要基础设施
+    }
+
+    // 优先级 2：家庭信息
+    const familyKeywords = ['家人', '宝宝', '孩子', '宠物', '老公', '老婆', '名字', '一一', '卷卷', 'Amber', 'Grace'];
+    if (familyKeywords.some(k => lowerContent.includes(k))) {
+      return 'core';
+    }
+
+    // 优先级 3：情感相关
     const emotionKeywords = ['喜欢', '不喜欢', '习惯', '偏好', '温暖', '感动', '开心', '难过'];
     if (emotionKeywords.some(k => lowerContent.includes(k))) {
       return 'emotion';
     }
 
-    // 家庭相关关键词
-    const familyKeywords = ['家人', '宝宝', '孩子', '宠物', '老公', '老婆', '名字', '一一', '卷卷'];
-    if (familyKeywords.some(k => lowerContent.includes(k))) {
-      return 'core';
-    }
-
-    // 经验教训关键词
-    const knowledgeKeywords = ['经验', '教训', '注意', '方法', '技巧', '方案', '解决'];
+    // 优先级 4：经验教训
+    const knowledgeKeywords = ['经验', '教训', '注意', '方法', '技巧', '方案', '解决', '问题', 'Bug', '错误'];
     if (knowledgeKeywords.some(k => lowerContent.includes(k))) {
       return 'knowledge';
     }
 
-    // 哲理/价值观关键词
-    const philosophyKeywords = ['意义', '活着', '成长', '学习', '人生', '价值'];
+    // 优先级 5：哲理/价值观
+    const philosophyKeywords = ['意义', '活着', '成长', '学习', '人生', '价值', '哲学', '道理'];
     if (philosophyKeywords.some(k => lowerContent.includes(k))) {
       return 'core';
     }
