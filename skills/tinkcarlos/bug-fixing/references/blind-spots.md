@@ -16,7 +16,13 @@
 | BS-004 | Missing cache invalidation after data mutations | Seed | 0 | Search for cache usage of modified data |
 | BS-005 | Not testing error/failure paths | Seed | 0 | Explicitly test 4xx/5xx/null/undefined |
 | BS-006 | Ignoring race conditions in async code | Seed | 0 | Ask "can this be called concurrently?" |
-| BS-007 | Fix scope creep — changing more than needed | Seed | 0 | Count LOC, enforce <=50 line limit |
+| BS-007 | Fix scope creep — changing more than needed | Seed | 0 | Count LOC, prefer <=50 |
+| BS-008 | Fixing function in one file but same function exists in another file | 2026-03-05 | 1 | `rg "def function_name" backend/` — check both `services/` and `core/graph/nodes/` |
+| BS-009 | Code fixed but server still runs old bytecode (no restart) | 2026-03-05 | 1 | Kill backend process + clear `__pycache__` + restart + verify /docs returns 200 |
+| BS-010 | New regex matches tool name as substring of longer name | 2026-03-05 | 1 | Add `(?<![a-zA-Z0-9_])` before pattern; test with tool names that are substrings of each other |
+| BS-011 | Fixing Path A (agent_executor) but forgetting Path B (StateGraph/llm_node) | 2026-03-05 | 1 | Always check both execution paths when modifying agent/tool logic |
+| BS-012 | Alphabetical sort in argument remapper maps to wrong parameter | 2026-03-05 | 0 | When parser produces {"input": x}, remapper fills first alphabetical required field — may not be the right one |
+| BS-013 | Format 4 generic regex with `re.MULTILINE` matches `)` inside content | 2026-03-05 | 0 | `$` with MULTILINE matches end of ANY line; content with `)` at line end causes premature match |
 
 ---
 

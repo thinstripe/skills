@@ -223,6 +223,51 @@ find . -name "*.pyc" -newer source_file.py
 
 ---
 
+## 10. OpenClaw-Specific Patterns
+
+### 10.1 Simulated Tool Call Parsing Failure
+
+- **Symptom**: LLM outputs `write_file("path", """content""")` but tool receives garbled single arg
+- **Detection**: Check `tool_arguments_remapped` log — if `extra_keys=['input']` appears, parser failed
+- **Root cause**: `tool_call_parser.py` regex patterns only handle single-arg calls
+- **Fix**: Use AST-based parsing for multi-arg calls; add word boundary `(?<![a-zA-Z0-9_])` to all patterns
+- **⚠️ Dual implementation**: `llm_node.py` has its own `parse_simulated_tool_calls` — must fix BOTH
+- **Verify**: Test with `write_file("path.md", """content""")` + `deepagents_write_file("p", """c""")`
+
+### 10.2 Tool Argument Remapping Misorder
+
+- **Symptom**: Tool gets wrong parameter filled (e.g. `content` filled instead of `file_path`)
+- **Detection**: Check `_remap_mismatched_arguments` in `tool_node.py` — it fills sorted alphabetically
+- **Root cause**: Remapper maps extra values to missing required fields in alphabetical order
+- **Fix**: Fix the parser to produce correct param names; don't rely on remapper for multi-arg tools
+- **Verify**: Check both `file_path` AND `text`/`content` are correctly populated
+
+### 10.3 Server Running Stale Code After Fix
+
+- **Symptom**: Tests pass locally but behavior unchanged in running system
+- **Detection**: Check process PID — if same PID as before fix, code not reloaded
+- **Root cause**: Python keeps modules in memory; `__pycache__` may serve old bytecode
+- **Fix**: Kill process + clear `__pycache__` + restart `run_dev.py`
+- **Verify**: New PID + health check at `/docs` + exercise fixed code path
+
+### 10.4 Reasoning Model Simulated Mode Issues
+
+- **Symptom**: Tool calls not detected from deepseek-reasoner / other reasoning models
+- **Detection**: Look for `simulated_tool_mode_enabled` in logs
+- **Root cause**: Reasoning models don't support native tool calling; output is plain text with code blocks
+- **Fix**: Ensure `tool_call_parser.py` handles the model's output format
+- **Verify**: Send test message using reasoning model, check tool call execution
+
+### 10.5 MCP Server Lifecycle Failure
+
+- **Symptom**: MCP tool call returns timeout or connection error
+- **Detection**: Check `server_status` in tool config; check if subprocess is alive
+- **Root cause**: `command`-type MCP server subprocess died or failed to start
+- **Fix**: Check `core/mcp/pool.py` lifecycle; restart MCP server; check env vars
+- **Verify**: Tool health check passes; actual MCP call returns result
+
+---
+
 ## Minimal Verification Checklist (Backend)
 
 - [ ] Original repro case no longer reproduces
