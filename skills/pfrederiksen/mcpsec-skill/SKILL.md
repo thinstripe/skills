@@ -29,21 +29,32 @@ metadata:
 
 Security scanner for Model Context Protocol (MCP) server configurations. Covers all 10 OWASP MCP Top 10 risk categories via [pfrederiksen/mcpsec](https://github.com/pfrederiksen/mcpsec) — an Apache 2.0 open-source Go binary.
 
-## ⚠️ Before Installing
+## ⚠️ Trust Model & Security Considerations
 
-This skill depends on an external binary (`mcpsec`). Before using:
+This skill scans MCP config files that may contain API keys and tokens. Read this before installing.
 
-1. **Verify provenance** — the binary is authored by [@pfrederiksen](https://github.com/pfrederiksen). Review the source at <https://github.com/pfrederiksen/mcpsec> and confirm the release binary matches the published checksums:
-   ```bash
-   curl -L https://github.com/pfrederiksen/mcpsec/releases/download/v1.0.0/checksums.txt
-   sha256sum mcpsec  # compare against checksums.txt
-   ```
+### Supply chain
+The `mcpsec` binary is an external artifact from GitHub. Mitigate supply chain risk by verifying the SHA256 before running — do not skip this step.
 
-2. **Network behavior** — the skill's Python wrapper makes no network calls. The `mcpsec` binary itself reads local config files only and makes no network calls per its source code, but this skill cannot enforce that. Review the source if you need certainty.
+**Pinned checksums for v1.0.0:**
+```
+e367cce46b1a152ccc8aedf2eeca5c6bcf5523b379a00a3f3704d61bf2b4fbca  linux_amd64
+98e6ccf883b3a40cea817e19cecd5dc66ae1816bdaf0a58f7fcd8a46576321b0  linux_arm64
+5ab2db3cc517f67600ace32f6dfacb15b2ce0b77319797a0431b105466379f3b  darwin_amd64
+a9ea3b8d753f0332ddc7720a9778f870f42f523b589d12d8eed5030befa52ee9  darwin_arm64
+```
 
-3. **What it reads** — the scanner reads MCP config JSON files on your system (Claude Desktop, Cursor, VS Code, custom paths). It does not exfiltrate, write, or transmit these files. Run `--quiet` to suppress output when there are no findings.
+For stronger guarantees, build from source: `git clone https://github.com/pfrederiksen/mcpsec && cd mcpsec && make build`
 
-4. **Isolation** — if you need stronger guarantees, run in a container or review the mcpsec source before use.
+### Sensitive data access
+MCP config files may contain API keys and tokens. The scanner reads them to detect hardcoded secrets (MCP04) but does not write, transmit, or log them. The wrapper script (`scan.py`) makes no network calls. The binary makes no network calls per its source, but this skill cannot enforce the binary's runtime behavior — review the source or run in an isolated environment if you require certainty.
+
+### Network behavior
+- **Wrapper script:** no network calls
+- **mcpsec binary:** no network calls per source; cannot be verified at runtime by this skill
+
+### Isolation
+For high-security environments, run in a container or VM, or audit the mcpsec binary source before use.
 
 ## Usage
 
@@ -67,15 +78,18 @@ python3 scripts/scan.py --quiet
 ## Installing mcpsec
 
 ```bash
-# macOS (Homebrew)
+# macOS (Homebrew — tap is maintained by pfrederiksen)
 brew install pfrederiksen/tap/mcpsec
 
-# Linux/macOS — pre-built binary
+# Linux amd64 — verify SHA256 BEFORE extracting
 curl -L https://github.com/pfrederiksen/mcpsec/releases/download/v1.0.0/mcpsec_1.0.0_linux_amd64.tar.gz -o mcpsec.tar.gz
-# Verify checksum before running:
-curl -L https://github.com/pfrederiksen/mcpsec/releases/download/v1.0.0/checksums.txt
-sha256sum mcpsec.tar.gz
-tar -xzf mcpsec.tar.gz && mv mcpsec /usr/local/bin/
+echo "e367cce46b1a152ccc8aedf2eeca5c6bcf5523b379a00a3f3704d61bf2b4fbca  mcpsec.tar.gz" | sha256sum -c -
+# Only proceed if the above prints "mcpsec.tar.gz: OK"
+tar -xzf mcpsec.tar.gz && mv mcpsec /usr/local/bin/mcpsec && chmod +x /usr/local/bin/mcpsec
+
+# Build from source (strongest supply chain guarantee)
+git clone https://github.com/pfrederiksen/mcpsec && cd mcpsec && make build
+sudo mv mcpsec /usr/local/bin/
 ```
 
 ## What It Scans
