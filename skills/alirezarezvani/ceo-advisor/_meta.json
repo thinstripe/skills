@@ -1,11 +1,17 @@
 {
   "owner": "alirezarezvani",
   "slug": "ceo-advisor",
-  "displayName": "Ceo Advisor",
+  "displayName": "CEO Advisor",
   "latest": {
-    "version": "1.0.0",
-    "publishedAt": 1770402384380,
-    "commit": "https://github.com/openclaw/skills/commit/748dd574171c7c8637a17b37e8189bdecbb039d3"
+    "version": "2.0.0",
+    "publishedAt": 1772746513044,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.0",
+      "publishedAt": 1770402384380,
+      "commit": "https://github.com/openclaw/skills/commit/748dd574171c7c8637a17b37e8189bdecbb039d3"
+    }
+  ]
 }
