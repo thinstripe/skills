@@ -1,0 +1,11 @@
+{
+  "owner": "nissan",
+  "slug": "gateway-env-injector",
+  "displayName": "Gateway Env Injector",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1772823958636,
+    "commit": null
+  },
+  "history": []
+}
