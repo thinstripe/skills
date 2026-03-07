@@ -3,9 +3,15 @@
   "slug": "cto-advisor",
   "displayName": "Cto Advisor",
   "latest": {
-    "version": "1.0.0",
-    "publishedAt": 1770402389612,
-    "commit": "https://github.com/openclaw/skills/commit/8c8aff092f944e2c77e56f1da980e1001f153000"
+    "version": "2.0.0",
+    "publishedAt": 1772746521548,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.0",
+      "publishedAt": 1770402389612,
+      "commit": "https://github.com/openclaw/skills/commit/8c8aff092f944e2c77e56f1da980e1001f153000"
+    }
+  ]
 }
