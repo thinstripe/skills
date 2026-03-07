@@ -1,0 +1,8 @@
+{
+  "name": "private-chat",
+  "version": "1.0.0",
+  "description": "私密聊天模式 - 通过暗号触发加密对话，敏感信息自动加密存储",
+  "author": "社区贡献者",
+  "license": "MIT",
+  "keywords": ["private", "encryption", "secure", "vault", "privacy"]
+}
