@@ -1,0 +1,11 @@
+{
+  "owner": "scottll",
+  "slug": "news-ai-001",
+  "displayName": "AI news generator",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1772765234474,
+    "commit": null
+  },
+  "history": []
+}
