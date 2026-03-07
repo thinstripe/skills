@@ -14,6 +14,24 @@ metadata:
       bins:
         - python3
         - curl
+  pricing:
+    type: freemium
+    free:
+      description: "每日 10 次查询，基础情绪分析"
+      limits:
+        dailyQueries: 10
+    pro:
+      price: 1.99
+      currency: USD
+      period: monthly
+      description: "无限查询，实时推送，API 访问"
+      features:
+        - "无限查询"
+        - "实时推送告警"
+        - "多币种对比"
+        - "历史情绪图表"
+        - "API 访问权限"
+        - "定制阈值告警"
 ---
 
 # 📰 News Sentiment Analyzer - 新闻情绪分析
