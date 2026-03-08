@@ -11,16 +11,22 @@ const getArg = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
+const getNumArg = (name, { required = false, defaultValue } = {}) => {
+  const v = getArg(name);
+  if (v === undefined || v === null || v === "") {
+    if (required) throw new Error(`Missing ${name}`);
+    return defaultValue;
+  }
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new Error(`Invalid number for ${name}`);
+  return n;
+};
+
 const SENSITIVE_KEYS = new Set([
-  "firstName",
-  "lastName",
-  "dateOfBirth",
-  "phoneNumber",
-  "avatar",
-  "email",
-  "address",
-  "firstNameInKana",
-  "lastNameInKana"
+  "firstName", "lastName", "dateOfBirth", "phoneNumber", "avatar", "email", "address",
+  "firstNameInKana", "lastNameInKana", "accountHolderName", "accountNumber", "iban",
+  "bic", "bicSwift", "bankCode", "sortCode", "routingNumber", "abartn", "clabe",
+  "ifsc", "cpf", "nationalId", "taxId"
 ]);
 
 const LOCALIZED_SENSITIVE_KEYS = new Set(["firstName", "lastName", "firstNameInKana", "lastNameInKana"]);
@@ -36,10 +42,7 @@ function redactValue(value) {
       continue;
     }
 
-    if (
-      k === "localizedInformation" &&
-      Array.isArray(v)
-    ) {
+    if (k === "localizedInformation" && Array.isArray(v)) {
       out[k] = v.map((entry) => {
         if (entry && typeof entry === "object" && LOCALIZED_SENSITIVE_KEYS.has(String(entry.key))) {
           return { ...entry, value: "[REDACTED]" };
@@ -66,7 +69,7 @@ function errorSummary(status, text) {
 
 async function apiGet(path, params = {}) {
   const url = new URL(BASE + path);
-  Object.entries(params).forEach(([k, v]) => v != null && url.searchParams.set(k, String(v)));
+  Object.entries(params).forEach(([k, v]) => v != null && v !== "" && url.searchParams.set(k, String(v)));
 
   const r = await fetch(url, {
     method: "GET",
@@ -94,19 +97,24 @@ switch (cmd) {
   }
 
   case "get_profile": {
-    const id = Number(getArg("--profile-id"));
-    if (!id) throw new Error("Missing --profile-id");
-    const all = await apiGet("/v1/profiles");
-    const found = all.find((p) => Number(p?.id) === id);
-    if (!found) throw new Error(`Profile not found: ${id}`);
-    printJson(found, { redact: true });
+    const id = getNumArg("--profile-id", { required: true });
+    const data = await apiGet(`/v1/profiles/${id}`);
+    printJson(data, { redact: true });
     break;
   }
 
   case "list_balances": {
-    const id = Number(getArg("--profile-id"));
-    if (!id) throw new Error("Missing --profile-id");
-    const data = await apiGet(`/v4/profiles/${id}/balances`, { types: "STANDARD" });
+    const id = getNumArg("--profile-id", { required: true });
+    const types = getArg("--types") || "STANDARD";
+    const data = await apiGet(`/v4/profiles/${id}/balances`, { types });
+    printJson(data);
+    break;
+  }
+
+  case "get_balance": {
+    const profileId = getNumArg("--profile-id", { required: true });
+    const balanceId = getNumArg("--balance-id", { required: true });
+    const data = await apiGet(`/v4/profiles/${profileId}/balances/${balanceId}`);
     printJson(data);
     break;
   }
@@ -120,8 +128,105 @@ switch (cmd) {
     break;
   }
 
+  case "get_exchange_rate_history": {
+    const source = (getArg("--source") || "").toUpperCase();
+    const target = (getArg("--target") || "").toUpperCase();
+    const from = getArg("--from") || "";
+    const to = getArg("--to") || "";
+    const group = getArg("--group") || "day";
+    if (!source || !target || !from || !to) throw new Error("Missing --source/--target/--from/--to");
+    if (!["day", "hour", "minute"].includes(group)) throw new Error("--group must be one of: day, hour, minute");
+    const data = await apiGet("/v1/rates", { source, target, from, to, group });
+    printJson(data);
+    break;
+  }
+
+  case "get_temporary_quote": {
+    const source = (getArg("--source") || "").toUpperCase();
+    const target = (getArg("--target") || "").toUpperCase();
+    const sourceAmount = getArg("--source-amount");
+    const targetAmount = getArg("--target-amount");
+    if (!source || !target) throw new Error("Missing --source/--target");
+    if (!sourceAmount && !targetAmount) throw new Error("Provide --source-amount or --target-amount");
+    if (sourceAmount && targetAmount) throw new Error("Provide only one of --source-amount or --target-amount");
+    const data = await apiGet("/v1/quotes", {
+      source,
+      target,
+      rateType: "FIXED",
+      sourceAmount,
+      targetAmount
+    });
+    printJson(data);
+    break;
+  }
+
+  case "get_quote": {
+    const quoteId = getNumArg("--quote-id", { required: true });
+    const data = await apiGet(`/v1/quotes/${quoteId}`);
+    printJson(data);
+    break;
+  }
+
+  case "list_recipients": {
+    const profileId = getNumArg("--profile-id", { required: true });
+    const currency = (getArg("--currency") || "").toUpperCase() || undefined;
+    const data = await apiGet("/v1/accounts", { profile: profileId, currency });
+    printJson(data, { redact: true });
+    break;
+  }
+
+  case "get_recipient": {
+    const accountId = getNumArg("--account-id", { required: true });
+    const data = await apiGet(`/v1/accounts/${accountId}`);
+    printJson(data, { redact: true });
+    break;
+  }
+
+  case "get_account_requirements": {
+    const source = (getArg("--source") || "").toUpperCase();
+    const target = (getArg("--target") || "").toUpperCase();
+    const sourceAmount = getNumArg("--source-amount", { required: true });
+    if (!source || !target) throw new Error("Missing --source/--target");
+    const data = await apiGet("/v1/account-requirements", { source, target, sourceAmount });
+    printJson(data);
+    break;
+  }
+
+  case "list_transfers": {
+    const profileId = getNumArg("--profile-id", { required: true });
+    const status = getArg("--status");
+    const createdDateStart = getArg("--created-date-start");
+    const createdDateEnd = getArg("--created-date-end");
+    const limit = getNumArg("--limit", { defaultValue: 10 });
+    const offset = getNumArg("--offset", { defaultValue: 0 });
+    const data = await apiGet("/v1/transfers", {
+      profile: profileId,
+      status,
+      createdDateStart,
+      createdDateEnd,
+      limit,
+      offset
+    });
+    printJson(data, { redact: true });
+    break;
+  }
+
+  case "get_transfer": {
+    const transferId = getNumArg("--transfer-id", { required: true });
+    const data = await apiGet(`/v1/transfers/${transferId}`);
+    printJson(data, { redact: true });
+    break;
+  }
+
+  case "get_delivery_estimate": {
+    const transferId = getNumArg("--transfer-id", { required: true });
+    const data = await apiGet(`/v1/delivery-estimates/${transferId}`);
+    printJson(data);
+    break;
+  }
+
   default:
     throw new Error(
-      "Usage: wise_readonly.mjs <list_profiles|get_profile|list_balances|get_exchange_rate> [--raw] ..."
+      "Usage: wise_readonly.mjs <list_profiles|get_profile|list_balances|get_balance|get_exchange_rate|get_exchange_rate_history|get_temporary_quote|get_quote|list_recipients|get_recipient|get_account_requirements|list_transfers|get_transfer|get_delivery_estimate> [--raw] ..."
     );
 }

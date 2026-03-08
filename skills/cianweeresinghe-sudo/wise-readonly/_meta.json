@@ -3,9 +3,15 @@
   "slug": "wise-readonly",
   "displayName": "Wise Read Only",
   "latest": {
-    "version": "1.0.2",
-    "publishedAt": 1772827363214,
-    "commit": "https://github.com/openclaw/skills/commit/0440df4351c0af8a0c7764d99d6c8de64c50c501"
+    "version": "1.0.3",
+    "publishedAt": 1772873946304,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.2",
+      "publishedAt": 1772827363214,
+      "commit": "https://github.com/openclaw/skills/commit/0440df4351c0af8a0c7764d99d6c8de64c50c501"
+    }
+  ]
 }
