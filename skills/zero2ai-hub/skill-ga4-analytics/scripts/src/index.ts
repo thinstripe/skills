@@ -306,7 +306,7 @@ export async function reindexUrls(urls: string[]) {
     try {
       console.log(`  → Requesting indexing: ${url}`);
       const result = await requestIndexing(url, { save: false });
-      results.push({ url, status: 'submitted', ...result });
+      results.push({ ...result, url, status: 'submitted' });
     } catch (error) {
       console.log(`  ✗ Failed: ${url}`);
       results.push({ url, status: 'failed', error: String(error) });

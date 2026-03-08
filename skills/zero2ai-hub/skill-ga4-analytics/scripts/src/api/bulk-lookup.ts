@@ -177,10 +177,10 @@ export async function getMetricsForUrls(
     dateRanges: [parsedDateRange],
     dimensions: [{ name: 'pagePath' }, { name: 'pageTitle' }],
     metrics: metrics.map(name => ({ name })),
-    dimensionFilter,
+    dimensionFilter: dimensionFilter as any,
   };
 
-  const [response] = await client.runReport(request);
+  const response = ((await client.runReport(request)) as any)[0];
 
   // Save results if requested
   if (save) {
