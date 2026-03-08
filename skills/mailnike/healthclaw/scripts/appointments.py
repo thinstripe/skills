@@ -130,6 +130,7 @@ def update_provider_schedule(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(sched_id)
     conn.execute(f"UPDATE healthclaw_provider_schedule SET {', '.join(updates)} WHERE id = ?", params)
+    audit(conn, "healthclaw_provider_schedule", sched_id, "update-provider-schedule", getattr(args, "company_id", None))
     conn.commit()
     ok({"id": sched_id, "updated_fields": changed})
 

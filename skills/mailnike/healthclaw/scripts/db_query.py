@@ -23,8 +23,8 @@ except ImportError:
     import json as _json
     print(_json.dumps({
         "status": "error",
-        "error": "ERPClaw foundation not installed. Install erpclaw-setup first: clawhub install erpclaw-setup",
-        "suggestion": "clawhub install erpclaw-setup"
+        "error": "ERPClaw foundation not installed. Install erpclaw first: clawhub install erpclaw",
+        "suggestion": "clawhub install erpclaw"
     }))
     sys.exit(1)
 
@@ -384,7 +384,7 @@ def main():
 
     _dep = check_required_tables(conn, REQUIRED_TABLES)
     if _dep:
-        _dep["suggestion"] = "clawhub install erpclaw-setup && clawhub install healthclaw"
+        _dep["suggestion"] = "clawhub install erpclaw && clawhub install healthclaw"
         print(json.dumps(_dep, indent=2))
         conn.close()
         sys.exit(1)

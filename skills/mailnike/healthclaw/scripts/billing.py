@@ -516,12 +516,13 @@ def get_claim(conn, args):
     data["line_count"] = conn.execute(
         "SELECT COUNT(*) FROM healthclaw_claim_line WHERE claim_id = ?", (claim_id,)
     ).fetchone()[0]
-    # Enrich: payment posting total
-    posting_total = conn.execute(
-        "SELECT COALESCE(SUM(CAST(amount AS REAL)), 0) FROM healthclaw_payment_posting WHERE claim_id = ?",
+    # Enrich: payment posting total (Python Decimal summation — never CAST AS REAL)
+    posting_rows = conn.execute(
+        "SELECT amount FROM healthclaw_payment_posting WHERE claim_id = ?",
         (claim_id,)
-    ).fetchone()[0]
-    data["total_payments_posted"] = str(round_currency(to_decimal(str(posting_total))))
+    ).fetchall()
+    posting_total = sum((to_decimal(r[0]) for r in posting_rows), Decimal("0"))
+    data["total_payments_posted"] = str(round_currency(posting_total))
     ok(data)
 
 

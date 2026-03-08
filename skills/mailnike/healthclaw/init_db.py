@@ -35,7 +35,7 @@ def create_healthclaw_tables(db_path):
     missing = [t for t in REQUIRED_FOUNDATION if t not in tables]
     if missing:
         print(f"ERROR: Foundation tables missing: {', '.join(missing)}")
-        print("Run erpclaw-setup first: clawhub install erpclaw-setup")
+        print("Run erpclaw first: clawhub install erpclaw", file=sys.stderr)
         conn.close()
         sys.exit(1)
 
@@ -1139,10 +1139,10 @@ def create_healthclaw_tables(db_path):
     ).fetchall()]
 
     conn.close()
-    print(f"{DISPLAY_NAME} schema created in {db_path}")
-    print(f"  Tables: {len(tables_after)}")
-    print(f"  Indexes: {len(indexes_after)}")
-    print(f"  Naming series: {len(naming_series)} per company ({len(companies)} companies)")
+    print(f"{DISPLAY_NAME} schema created in {db_path}", file=sys.stderr)
+    print(f"  Tables: {len(tables_after)}", file=sys.stderr)
+    print(f"  Indexes: {len(indexes_after)}", file=sys.stderr)
+    print(f"  Naming series: {len(naming_series)} per company ({len(companies)} companies)", file=sys.stderr)
 
 
 if __name__ == "__main__":

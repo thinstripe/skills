@@ -408,9 +408,9 @@ def list_dispensings(conn, args):
 
 
 # ---------------------------------------------------------------------------
-# 10. void-dispensing
+# 10. cancel-dispensing
 # ---------------------------------------------------------------------------
-def void_dispensing(conn, args):
+def cancel_dispensing(conn, args):
     disp_id = getattr(args, "dispensing_id", None)
     if not disp_id:
         err("--dispensing-id is required")
@@ -424,7 +424,7 @@ def void_dispensing(conn, args):
         "UPDATE healthclaw_dispensing SET status = 'voided', updated_at = datetime('now') WHERE id = ?",
         (disp_id,)
     )
-    audit(conn, "healthclaw_dispensing", disp_id, "void-dispensing", None)
+    audit(conn, "healthclaw_dispensing", disp_id, "cancel-dispensing", None)
     conn.commit()
     ok({"id": disp_id, "status": "voided"})
 
@@ -442,5 +442,5 @@ ACTIONS = {
     "add-dispensing": add_dispensing,
     "get-dispensing": get_dispensing,
     "list-dispensings": list_dispensings,
-    "void-dispensing": void_dispensing,
+    "cancel-dispensing": cancel_dispensing,
 }

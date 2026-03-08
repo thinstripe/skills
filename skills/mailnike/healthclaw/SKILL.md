@@ -7,10 +7,12 @@ homepage: https://www.healthclaw.ai
 source: https://github.com/avansaber/healthclaw
 tier: 4
 category: healthcare
-requires: [erpclaw-setup, erpclaw-gl, erpclaw-selling, erpclaw-buying, erpclaw-hr, erpclaw-payments, erpclaw-inventory]
+requires: [erpclaw, erpclaw-people]
 database: ~/.openclaw/erpclaw/data.sqlite
 user-invocable: true
 tags: [healthclaw, healthcare, hospital, ehr, emr, clinical, patient, encounter, diagnosis, prescription, billing, claims, lab, imaging, referral, prior-auth, hipaa, icd10, cpt, formulary]
+scripts:
+  - scripts/db_query.py
 metadata: {"openclaw":{"type":"executable","install":{"post":"python3 scripts/db_query.py --action status"},"requires":{"bins":["python3"],"env":[],"optionalEnv":["ERPCLAW_DB_PATH"]},"os":["darwin","linux"]}}
 ---
 
@@ -28,7 +30,7 @@ All financial transactions post to the ERPClaw General Ledger with full double-e
 
 - **Local-only**: All data stored in `~/.openclaw/erpclaw/data.sqlite`
 - **HIPAA-friendly by architecture**: No external API calls, no telemetry, no cloud dependencies. Zero network calls in any code path.
-- **No credentials required**: Uses erpclaw_lib shared library (installed by erpclaw-setup)
+- **No credentials required**: Uses erpclaw_lib shared library (installed by erpclaw)
 - **SQL injection safe**: All queries use parameterized statements
 - **Consent tracking**: Patient consent records with type, granted date, expiration, witness for audit trail
 - **Immutable audit trail**: GL entries are never modified -- cancellations create reversals. All actions write to audit_log.
@@ -44,7 +46,7 @@ dispensing, pharmacy, healthcare, medical, provider, check-in, check-out, waitli
 
 If the database does not exist or you see "no such table" errors:
 ```
-python3 {baseDir}/../erpclaw-setup/scripts/db_query.py --action initialize-database
+python3 {baseDir}/../erpclaw/scripts/db_query.py --action initialize-database
 python3 {baseDir}/scripts/db_query.py --action status
 ```
 
@@ -97,7 +99,7 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 | `list-allergies` | `--patient-id` | `--severity --status --limit --offset` |
 | `add-medical-history` | `--patient-id --condition` | `--icd10-code --diagnosis-date --resolution-date --medhist-status --notes` |
 | `update-medical-history` | `--medical-history-id` | `--resolution-date --medhist-status --notes` |
-| `list-medical-histories` | `--patient-id` | `--medhist-status --limit --offset` |
+| `list-medical-history` | `--patient-id` | `--medhist-status --limit --offset` |
 | `add-patient-contact` | `--patient-id --contact-name --relationship` | `--contact-type --contact-phone --contact-email --is-primary` |
 | `update-patient-contact` | `--contact-id` | `--contact-name --contact-phone --contact-email --relationship --is-primary` |
 | `add-consent` | `--patient-id --consent-type --granted-date` | `--expiration-date --witness-name --obtained-by-id --notes` |
@@ -126,7 +128,7 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 | `add-encounter` | `--company-id --patient-id --provider-id --encounter-date` | `--encounter-type --department --room --chief-complaint --admission-date` |
 | `update-encounter` | `--encounter-id` | `--encounter-status --discharge-date --discharge-disposition --notes` |
 | `get-encounter` | `--encounter-id` | |
-| `list-encounters` | | `--patient-id --provider-id --status --limit --offset` |
+| `list-encounters` | | `--patient-id --provider-id --encounter-status --limit --offset` |
 | `add-vitals` | `--encounter-id --patient-id` | `--temperature --heart-rate --respiratory-rate --bp-systolic --bp-diastolic --oxygen-saturation --weight --height --pain-level --recorded-by-id` |
 | `list-vitals` | `--encounter-id` | `--limit --offset` |
 | `add-diagnosis` | `--encounter-id --patient-id --icd10-code --dx-description` | `--diagnosis-type --diagnosed-by-id --notes` |
@@ -174,7 +176,7 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 | `add-dispensing` | `--company-id --prescription-id --patient-id --dispensed-by-id --dispensed-date` | `--formulary-item-id --item-id --quantity --lot-number --directions --refill-number` |
 | `get-dispensing` | `--dispensing-id` | |
 | `list-dispensings` | | `--patient-id --prescription-id --status --limit --offset` |
-| `void-dispensing` | `--dispensing-id` | |
+| `cancel-dispensing` | `--dispensing-id` | |
 
 ### Lab/Diagnostics (14 actions)
 | Action | Required Flags | Optional Flags |
@@ -244,7 +246,7 @@ For all actions: `python3 {baseDir}/scripts/db_query.py --action <action> [flags
 
 ## Technical Details (Tier 3)
 
-**Tables owned (35):** healthclaw_patient, healthclaw_patient_insurance, healthclaw_allergy, healthclaw_medical_history, healthclaw_patient_contact, healthclaw_patient_consent, healthclaw_provider_schedule, healthclaw_schedule_block, healthclaw_appointment, healthclaw_waitlist, healthclaw_encounter, healthclaw_vitals, healthclaw_diagnosis, healthclaw_prescription, healthclaw_procedure, healthclaw_clinical_note, healthclaw_order, healthclaw_fee_schedule, healthclaw_fee_schedule_item, healthclaw_charge, healthclaw_claim, healthclaw_claim_line, healthclaw_payment_posting, healthclaw_formulary, healthclaw_formulary_item, healthclaw_dispensing, healthclaw_lab_order, healthclaw_lab_test, healthclaw_lab_result, healthclaw_imaging_order, healthclaw_imaging_result, healthclaw_referral, healthclaw_prior_auth, healthclaw_auth_usage, healthclaw_appointment_waitlist_entry
+**Tables owned (35):** healthclaw_patient, healthclaw_patient_insurance, healthclaw_allergy, healthclaw_medical_history, healthclaw_patient_contact, healthclaw_consent, healthclaw_provider_schedule, healthclaw_schedule_block, healthclaw_appointment, healthclaw_appointment_reminder, healthclaw_waitlist, healthclaw_encounter, healthclaw_vitals, healthclaw_diagnosis, healthclaw_prescription, healthclaw_procedure, healthclaw_clinical_note, healthclaw_order, healthclaw_fee_schedule, healthclaw_fee_schedule_item, healthclaw_charge, healthclaw_claim, healthclaw_claim_line, healthclaw_payment_posting, healthclaw_formulary, healthclaw_formulary_item, healthclaw_dispensing, healthclaw_lab_order, healthclaw_lab_test, healthclaw_lab_result, healthclaw_imaging_order, healthclaw_imaging_result, healthclaw_referral, healthclaw_prior_auth, healthclaw_auth_usage
 
 **Script:** `scripts/db_query.py` routes to 7 domain modules: patients.py, appointments.py, clinical.py, billing.py, inventory.py, lab.py, referrals.py
 

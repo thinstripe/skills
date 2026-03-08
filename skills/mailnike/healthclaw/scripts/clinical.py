@@ -321,6 +321,7 @@ def update_diagnosis(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(dx_id)
     conn.execute(f"UPDATE healthclaw_diagnosis SET {', '.join(updates)} WHERE id = ?", params)
+    audit(conn, "healthclaw_diagnosis", dx_id, "update-diagnosis", getattr(args, "company_id", None))
     conn.commit()
     ok({"id": dx_id, "updated_fields": changed})
 
@@ -434,6 +435,7 @@ def update_prescription(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(rx_id)
     conn.execute(f"UPDATE healthclaw_prescription SET {', '.join(updates)} WHERE id = ?", params)
+    audit(conn, "healthclaw_prescription", rx_id, "update-prescription", getattr(args, "company_id", None))
     conn.commit()
     ok({"id": rx_id, "updated_fields": changed})
 
@@ -592,6 +594,7 @@ def update_clinical_note(conn, args):
     updates.append("updated_at = datetime('now')")
     params.append(note_id)
     conn.execute(f"UPDATE healthclaw_clinical_note SET {', '.join(updates)} WHERE id = ?", params)
+    audit(conn, "healthclaw_clinical_note", note_id, "update-clinical-note", getattr(args, "company_id", None))
     conn.commit()
     ok({"id": note_id, "updated_fields": changed})
 
