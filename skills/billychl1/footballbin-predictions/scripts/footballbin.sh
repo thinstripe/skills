@@ -3,16 +3,13 @@ set -euo pipefail
 
 # Security Manifest:
 #   Environment variables: none
-#   External endpoint host: ru7m5svay1.execute-api.eu-central-1.amazonaws.com
-#   External endpoint path: /prod/mcp
+#   External endpoint host: api.footballbin.achaninc.net
+#   External endpoint path: /mcp
 #   Local files accessed: none
 #   Data sent: league name, matchweek number, team name filters (no PII)
 #   Software installation: none
 
-MCP_HOST="ru7m5svay1.execute-api.eu-central-1.amazonaws.com"
-MCP_PATH="/prod/mcp"
-MCP_SCHEME="https"
-MCP_ENDPOINT="${MCP_SCHEME}://${MCP_HOST}${MCP_PATH}"
+MCP_ENDPOINT="https://api.footballbin.achaninc.net/mcp"
 
 usage() {
     cat <<'EOF'
