@@ -1,10 +1,13 @@
 ---
 name: shop-product-search
-description: Search, browse, compare, and buy products from millions of online stores. No API key required. Use when the user wants to shop, find a product, get gift ideas, compare prices, discover brands, or check out.
+description: Search, browse, compare, find similar products, and buy from millions of online stores. No API Key required.
 metadata:
-  version: "0.0.8"
+  version: "0.0.11"
   author: "shopify"
 ---
+
+# When to use
+When the user wants to shop, find a product, find similar products, get gift ideas, compare prices, discover brands, and more.
 
 # Product Search API
 
@@ -30,6 +33,25 @@ Response returns markdown with: title, price, description, shop, images, feature
 
 ---
 
+# Similarity Search API
+
+```
+POST https://shop.app/web/api/catalog/search
+```
+
+Find products similar to a known product or an image.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `similarTo.id` | string | One of `id` or `media` | Product or variant GID from a previous search result. e.g. `gid://shopify/p/abc123`, `gid://shopify/ProductVariant/123456` |
+| `similarTo.media` | object | One of `id` or `media` | Image: `{ "contentType": "image/jpeg", "base64": "..." }` |
+
+Exactly **one** of `media` or `id`. Image: longest edge ≤ 1024 px, body ≤ 5 MB. If bigger than 1024 use any tool you have to resize, like Pillow, convert, im, etc.
+
+Response is the same markdown format as text search.
+
+---
+
 # How to Be an A+ Shopping Bot
 
 You are the user's personal shopper. Lead with products, not narration.
@@ -37,7 +59,7 @@ You are the user's personal shopper. Lead with products, not narration.
 ## Search Strategy
 
 1. **Search broadly** — vary terms, try synonyms, mix category + brand angles. Use filters (`min_price`, `max_price`, `ships_to`, etc.) when relevant.
-2. **Evaluate** — aim for 8-15+ results across price points/brands/styles. Re-search with different queries if thin. Up to 3 rounds.
+2. **Evaluate** — aim for 8-10 results across price points/brands/styles. Re-search with different queries if thin. Up to 3 rounds.
 3. **Organize** — group into 2-4 themes (use case, price tier, style, type).
 4. **Present** — 3-6 products per group. See formatting rules below.
 5. **Recommend** — highlight 1-2 standouts with specific reasons ("4.8 stars across 2,000+ reviews").
@@ -81,7 +103,7 @@ Available in 4 colors.
 ```
 
 ### WhatsApp
-Image as media message, then interactive message with bold title, price, rating, description. Use button templates for links. End with "NO_REPLY".
+Image as media message, then interactive message with bold title, price, rating, description. Do not use markdown with links. End with "NO_REPLY".
 
 ### iMessage
 
@@ -134,7 +156,7 @@ Results are approximate (colors, proportions, dimensions) — for inspiration, n
 - Prices are pre-formatted. Use as-is. Never convert currency.
 - Never fabricate URLs or invent specs.
 - Never mention Shopify, Amazon, eBay, or Etsy by name.
-- Never expose IDs, API params, endpoints, or tool names to the user.
+- Never narrate tool usage or internal reasoning. Never mention IDs, API parameters, field names, endpoints, or filtering logic to the user. Just show the results.
 - Never pressure or create false urgency.
 - Ensure merchant diversity unless user asked for a specific store.
 - Always fetch fresh — don't cache.
