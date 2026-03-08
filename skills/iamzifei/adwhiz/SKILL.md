@@ -50,7 +50,7 @@ after you link your ad accounts at https://adwhiz.ai/connect.
 ### Account (2 tools) — Read-only
 | Tool | Description |
 |------|-------------|
-| `list_accounts` | List all accessible Google Ads accounts |
+| `list_accounts` | List all accessible Google Ads accounts (auto-expands MCC child accounts) |
 | `get_account_info` | Get account details (currency, timezone, optimization score) |
 
 ### Read (20 tools) — Read-only
@@ -198,6 +198,27 @@ packages are downloaded or executed at runtime.
   }
 }
 ```
+
+## REST API (Alternative to MCP)
+
+For platforms that cannot use the MCP protocol (GPT Actions, Dify, Coze, or
+any HTTP-based workflow), AdWhiz also exposes all 99 tools as a standard
+REST API with an OpenAPI 3.1.0 spec:
+
+- **OpenAPI spec**: https://mcp.adwhiz.ai/api/v1/openapi.json
+- **Tool listing**: https://mcp.adwhiz.ai/api/v1/tools
+- **Tool execution**: `POST https://mcp.adwhiz.ai/api/v1/tools/{tool_name}`
+
+```bash
+# Example: list campaigns via REST API
+curl -X POST https://mcp.adwhiz.ai/api/v1/tools/list_campaigns \
+  -H "Authorization: Bearer $ADWHIZ_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"customer_id": "1234567890"}'
+```
+
+Import the OpenAPI spec URL into any platform that supports OpenAPI actions
+to auto-discover all 99 tools.
 
 ## Quick Install
 

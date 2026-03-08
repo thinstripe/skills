@@ -1,13 +1,18 @@
 {
   "owner": "iamzifei",
   "slug": "adwhiz",
-  "displayName": "AdWhiz",
+  "displayName": "Adwhiz",
   "latest": {
-    "version": "2.0.0",
-    "publishedAt": 1772339545832,
-    "commit": "https://github.com/openclaw/skills/commit/5c61784a97d38c87e9c264d110032c8810e4ff68"
+    "version": "2.2.0",
+    "publishedAt": 1772878162654,
+    "commit": null
   },
   "history": [
+    {
+      "version": "2.0.0",
+      "publishedAt": 1772339545832,
+      "commit": "https://github.com/openclaw/skills/commit/5c61784a97d38c87e9c264d110032c8810e4ff68"
+    },
     {
       "version": "1.1.0",
       "publishedAt": 1771833693591,
