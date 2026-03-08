@@ -82,17 +82,17 @@ After installation, run commands with `hotfun <command> [args]`. If you use a lo
 
 ## Create token flow
 
-### 1. Ask user for required information (must be done first)
+### 1. Ask user for required AND optional information (must be done first)
 
-Before calling `create-token`, the Agent **must** ask the user for and confirm:
+Before calling `create-token`, the Agent **must** ask the user for all of the following parameters. For optional parameters, the Agent **must still ask** the user whether they want to provide a value — do not skip them silently. If the user declines or leaves them empty, omit them from the command.
 
 | Info | Required | Description |
 |------|----------|-------------|
 | **Token name** (name) | Yes | Full token name, max 255 chars |
 | **Token symbol** (symbol) | Yes | e.g. MTK, DOGE, max 32 chars |
 | **Image URL** (image_url) | Yes | Token image URL (e.g. IPFS link) |
-| **Description** (description) | No | Token description |
-| **X Royalty Party** (x_royalty_party) | No | X (Twitter) username for royalty party |
+| **Description** (description) | No (but must ask) | Token description, e.g. a short intro for the token |
+| **X Royalty Party** (x_royalty_party) | No (but must ask) | X (Twitter) username for royalty party |
 
 ### 2. Technical flow (done by create-token)
 

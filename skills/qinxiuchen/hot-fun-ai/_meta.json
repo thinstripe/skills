@@ -3,11 +3,16 @@
   "slug": "hot-fun-ai",
   "displayName": "Hot Fun Integration",
   "latest": {
-    "version": "1.0.1",
-    "publishedAt": 1772955854072,
-    "commit": "https://github.com/openclaw/skills/commit/55b507094d9ed3d8a8bad8c08fd26639f05125b5"
+    "version": "1.0.2",
+    "publishedAt": 1772956882236,
+    "commit": null
   },
   "history": [
+    {
+      "version": "1.0.1",
+      "publishedAt": 1772955854072,
+      "commit": "https://github.com/openclaw/skills/commit/55b507094d9ed3d8a8bad8c08fd26639f05125b5"
+    },
     {
       "version": "1.0.0",
       "publishedAt": 1772790593126,
