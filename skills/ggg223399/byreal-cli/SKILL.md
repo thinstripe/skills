@@ -26,8 +26,8 @@ byreal-cli catalog show <capability-id>
 # Check if already installed
 which byreal-cli && byreal-cli --version
 
-# Install (one-time)
-npm install -g https://github.com/byreal-git/byreal-cli/releases/latest/download/byreal-cli.tgz
+# Install
+npm install -g @byreal-io/byreal-cli
 ```
 
 ## Check for Updates
@@ -42,6 +42,14 @@ If an update is available:
 byreal-cli update install
 ```
 
+## Credentials & Permissions
+
+- **Read-only commands** (pool, token, tvl, stats): No wallet required
+- **Write commands** (swap, position open/close/claim): Require wallet setup via `byreal-cli wallet set` or `byreal-cli setup`
+- Private keys are stored locally at `~/.config/byreal/keys/` with strict file permissions (mode 0600)
+- The CLI never transmits private keys over the network — keys are only used locally for transaction signing
+- AI agents should **never** ask users to paste private keys in chat; always direct them to run `byreal-cli setup` interactively
+
 ## Hard Constraints
 
 1. **`-o json` only for parsing** — when showing results to the user, **omit it** and let the CLI's built-in tables/charts render directly. Never fetch JSON then re-draw charts yourself.
@@ -51,3 +59,4 @@ byreal-cli update install
 5. **Large amounts (>$1000)** require explicit confirmation
 6. **High slippage (>200 bps)** must warn user
 7. **Check wallet before write ops** — run `wallet address` before any wallet-required command
+
