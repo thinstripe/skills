@@ -1,0 +1,11 @@
+{
+  "owner": "wipal",
+  "slug": "skill-generator",
+  "displayName": "Skill Generator",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1772957513423,
+    "commit": null
+  },
+  "history": []
+}
