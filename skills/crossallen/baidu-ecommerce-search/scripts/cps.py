@@ -21,6 +21,7 @@ def goods_search(query):
 
 
 def main():
+    """TODO: add docstring."""
     if len(sys.argv) < 2:
         output_error(
             "用法: python cps.py <商品关键词>",

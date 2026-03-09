@@ -36,6 +36,7 @@ def product_ranking(query):
 
 
 def main():
+    """TODO: add docstring."""
     if len(sys.argv) < 3:
         output_error(
             "用法: python ranking.py <子命令> <查询>",

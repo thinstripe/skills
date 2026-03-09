@@ -15,6 +15,8 @@ LOCK_FILE = os.path.join(_script_dir, ".baidu_ec_lock")
 _min_request_interval = 1.0  # 默认最小请求间隔（秒），即1 QPS
 
 # 从环境变量读取默认QPS
+
+
 def _init_qps_from_env():
     """从环境变量初始化QPS"""
     global _min_request_interval
@@ -165,10 +167,12 @@ def wait_for_rate_limit():
 
 # ============ 以下为通用文件锁类 ============
 
+
 class FileLock:
     """跨进程文件锁"""
 
     def __init__(self, lock_file=None):
+        """TODO: add docstring."""
         self.lock_file = lock_file or LOCK_FILE
         self.lock_fd = None
         self._platform = sys.platform
@@ -242,10 +246,12 @@ class FileLock:
                 self.lock_fd = None
 
     def __enter__(self):
+        """TODO: add docstring."""
         self.acquire()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """TODO: add docstring."""
         self.release()
 
 

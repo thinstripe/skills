@@ -22,6 +22,7 @@ def compare(query):
 
 
 def main():
+    """TODO: add docstring."""
     if len(sys.argv) < 2:
         output_error(
             "用法: python compare.py <对比查询>",

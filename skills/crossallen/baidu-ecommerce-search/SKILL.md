@@ -1,13 +1,20 @@
 ---
 name: baidu-ecommerce-search
-description: 百度电商搜索，包括cps商品查询、全网比价、榜单、商品参数、品牌品类知识等能力
+description: 百度电商搜索，包括cps商品查询、榜单、商品参数、品牌品类知识等能力
+keywords:
+  - 电商搜索
+  - ecommerce search
+  - 商品查询
+  - 榜单
+  - 商品参数
+  - CPS
 homepage: https://openai.baidu.com
 metadata: {"openclaw":{"emoji":"🛒","slug":"baidu-ecommerce-search","requires":{"bins":["python3"],"env":["BAIDU_EC_SEARCH_TOKEN"]},"primaryEnv":"BAIDU_EC_SEARCH_TOKEN"}}
 ---
 
 # baidu-ecommerce-search
 
-百度电商搜索，包括商品对比、全网比价、榜单、商品参数、品牌品类知识等能力。
+百度电商搜索，包括商品对比、榜单、商品参数、品牌品类知识等能力。
 
 ## Setup
 
@@ -72,17 +79,6 @@ metadata: {"openclaw":{"emoji":"🛒","slug":"baidu-ecommerce-search","requires"
 - "查找[商品]"
 - "哪里买[商品]"
 - "[商品]推荐"
-
-**5. 全网比价**
-
-**触发时机：** `xxxx价格`、`xxxx比价`
-
-**价格类：**
-- "[品类/品牌/SPU/SKU]价格"
-- "[品类/品牌/SPU/SKU]多少钱"
-
-**比价类：**
-- "[品类/品牌/SPU/SKU]比价"
 
 ## Usage
 
@@ -210,118 +206,6 @@ python3 scripts/cps.py "机械键盘"
 - 销量信息
 - 优惠信息
 
-### 5. 全网比价
-
-**xxxx价格：返回对应层级的价格**
-- 品类/品牌 → spu列表价格
-- SPU → spu价格 + 各sku价格
-- SKU → 各平台商品价格
-
-**xxxx比价：查询到对应sku的商品价格**
-- 品类/品牌 → spu列表→第一个spu→第一个sku→商品价格，spu列表query需要修改为xxx价格
-- SPU → spu列表→对应spu→第一个sku→商品价格，spu列表query需要修改为xxx价格
-- SKU → spu列表→对应spu→对应sku→商品价格，spu列表query需要修改为xxx价格
-
-#### API 层级关系
-
-```
-query → spu列表 → spuID → sku列表 → skuID → 商品价格
-```
-
----
-
-#### 5.1 SPU 比价
-
-基于用户 query 返回匹配的 SPU 列表，包含 SPUID、名称、价格等信息。
-
-**触发场景：** 用户询问 "[品类]价格"、"[品牌]价格"
-
-```bash
-# 品类价格
-python3 scripts/bijia.py spu "手机价格"
-python3 scripts/bijia.py spu "冰箱价格"
-
-# 品牌价格
-python3 scripts/bijia.py spu "华为价格"
-python3 scripts/bijia.py spu "小米价格"
-```
-
-**返回数据包含：**
-- SPU ID（可用于后续SKU比价）
-- SPU 名称
-- SPU 图片
-- 价格区间
-- 品牌
-- 相关 SKU 信息
-
----
-
-#### 5.2 SKU 比价
-
-基于 SPUID 查询该 SPU 下所有 SKU 列表及价格。
-
-**调用流程：** 首先使用 SPU比价能力获取品牌下所有 SPU，然后基于返回结果中的 SPUID 调用 SKU比价。
-
-**示例：**
-```bash
-# 1. 先用品牌名SPU比价获取SPUID
-python3 scripts/bijia.py spu "华为价格"
-
-# 2. 基于返回的SPUID查询该SPU下的所有SKU
-python3 scripts/bijia.py sku_list "shv2_09bff5cedd0cc952c7cbaf05e08ae972"
-```
-
-**完整调用（SPU名称价格场景）：**
-```bash
-# 例如用户询问 "Mate 60价格"
-# Step 1: 使用品牌名"华为"获取所有SPU
-# Step 2: 从结果中找到"Mate 60"对应的SPUID
-# Step 3: 基于SPUID调用SKU比价
-```
-
-**返回数据包含：**
-- SKU ID（可用于后续SKU商品比价）
-- SKU 名称
-- 规格参数（颜色、存储等）
-- 价格信息
-- SPU 信息
-
----
-
-#### 5.3 SKU 商品比价
-
-基于 SKUID 查询该 SKU 下所有商品在不同渠道、不同平台的价格。
-
-**调用流程：** 首先使用 SPU比价获取品牌下所有 SPU，然后基于 SPUID 获取 SKU列表，最后基于 SKUID 调用 SKU商品比价。
-
-**示例：**
-```bash
-# 1. 先用品牌名SPU比价获取SPUID
-python3 scripts/bijia.py spu "华为价格"
-
-# 2. 基于SPUID获取SKU列表及SKUID
-python3 scripts/bijia.py sku_list "shv2_09bff5cedd0cc952c7cbaf05e08ae972"
-
-# 3. 基于SKUID查询各平台价格
-python3 scripts/bijia.py sku_goods "shv2_62a16fd98771e0ed3aee0f2a6b40dbb9"
-```
-
-**完整调用（SKU名称价格场景）：**
-```bash
-# 例如用户询问 "Mate 60 Pro 12GB+256GB价格"
-# Step 1: 使用品牌名"华为"获取所有SPU
-# Step 2: 从结果中找到"Mate 60 Pro"对应的SPUID
-# Step 3: 基于SPUID获取SKU列表，找到"12GB+256GB"对应的SKUID
-# Step 4: 基于SKUID调用SKU商品比价
-```
-
-**返回数据包含：**
-- 商品名称
-- 商品价格
-- 购买链接（使用 `cps_url` 字段，当 `cps_url` 有值时作为购买链接展示，当 `cps_url` 为空时则不展示购买链接）
-- 平台信息（淘宝、京东、拼多多等）
-- 店铺信息
-- 优惠信息
 
 ## 错误处理
 

@@ -14,7 +14,7 @@ import urllib.error
 
 # QPS控制从 lock.py 模块导入
 try:
-    from .lock import wait_for_rate_limit, set_qps  # 作为包导入时
+    from scripts.lock import wait_for_rate_limit, set_qps  # 作为包导入时
 except ImportError:
     from lock import wait_for_rate_limit, set_qps   # 直接运行脚本时
 
