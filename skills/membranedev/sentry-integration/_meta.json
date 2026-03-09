@@ -1,0 +1,11 @@
+{
+  "owner": "membranedev",
+  "slug": "sentry-integration",
+  "displayName": "Sentry",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1772953338567,
+    "commit": null
+  },
+  "history": []
+}
