@@ -1,0 +1,11 @@
+{
+  "owner": "theshadowrose",
+  "slug": "canary-sr",
+  "displayName": "Canary",
+  "latest": {
+    "version": "1.0.3",
+    "publishedAt": 1773077478904,
+    "commit": null
+  },
+  "history": []
+}
