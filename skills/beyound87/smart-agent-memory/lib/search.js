@@ -1,11 +1,13 @@
 /**
- * Lightweight full-text search for Markdown files.
- * No external dependencies. Scores by TF + recency.
+ * Full-text search for Markdown memory files.
+ * Uses qmd (BM25 + vectors + rerank) when available, falls back to built-in TF + recency.
+ * No external dependencies.
  */
 
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 /**
  * Search all .md files in a directory (recursive) for a query.
@@ -72,4 +74,31 @@ function searchFiles(dir, query, { limit = 20, excludeDirs = ['.archive', '.data
   return results.slice(0, limit);
 }
 
-module.exports = { searchFiles };
+/**
+ * Try qmd hybrid search first; fall back to built-in searchFiles.
+ * @param {string} dir - Directory to search
+ * @param {string} query - Search query
+ * @param {object} opts - { limit }
+ * @returns {Array<{file, score, matches}>}
+ */
+function smartSearch(dir, query, { limit = 20 } = {}) {
+  try {
+    const out = execFileSync('qmd', ['query', query, '--limit', String(limit)], {
+      encoding: 'utf8', timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const lines = out.trim().split('\n').filter(Boolean);
+    if (lines.length > 0) {
+      return lines.map((line, i) => ({
+        file: line.split(':')[0] || line,
+        score: limit - i,
+        matches: [{ line: 0, content: line }],
+        source: 'qmd',
+      }));
+    }
+  } catch {
+    // qmd not available or failed, fall back
+  }
+  return searchFiles(dir, query, { limit }).map(r => ({ ...r, source: 'builtin' }));
+}
+
+module.exports = { searchFiles, smartSearch };

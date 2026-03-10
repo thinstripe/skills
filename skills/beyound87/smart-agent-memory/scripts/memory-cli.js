@@ -3,7 +3,10 @@
  * Smart Agent Memory — CLI
  *
  * Usage:
- *   node memory-cli.js remember <content> [--tags tag1,tag2] [--source conversation]
+ *   node memory-cli.js index                                    ← compact memory index (read FIRST)
+ *   node memory-cli.js context [--tag x] [--skill x] [--days 7] ← load scoped context on demand
+ *   node memory-cli.js skill-mem <skill-name>                   ← get skill experience memory
+ *   node memory-cli.js remember <content> [--tags tag1,tag2] [--source conversation] [--skill name]
  *   node memory-cli.js recall <query> [--limit 10] [--tags tag1]
  *   node memory-cli.js forget <id>
  *   node memory-cli.js facts [--tags tag1] [--limit 50]
@@ -21,11 +24,12 @@
  */
 
 'use strict';
+const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { createStore } = require('../lib/store');
 const { runGC, getTemperatureReport } = require('../lib/temperature');
-const { searchFiles } = require('../lib/search');
+const { searchFiles, smartSearch } = require('../lib/search');
 const { extractSkill } = require('../lib/extract');
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -47,6 +51,21 @@ const flagInt = (name, def) => {
   return v !== undefined ? parseInt(v, 10) : def;
 };
 
+// Extract positional args (skip flags and their values)
+const FLAGS_WITH_VALUES = ['--tags', '--limit', '--tag', '--skill', '--entity-type', '--days',
+  '--context', '--outcome', '--action', '--insight', '--source', '--skill-name', '--attr'];
+function positionalArgs(startIndex = 1) {
+  const result = [];
+  for (let i = startIndex; i < args.length; i++) {
+    if (args[i].startsWith('--')) {
+      if (FLAGS_WITH_VALUES.includes(args[i])) i++; // skip value too
+      continue;
+    }
+    result.push(args[i]);
+  }
+  return result;
+}
+
 // ── Colors ──────────────────────────────────────────────────────────────────
 const c = {
   green: s => `\x1b[32m${s}\x1b[0m`,
@@ -61,19 +80,88 @@ const c = {
 function main() {
   switch (cmd) {
 
-    case 'remember': {
-      // Collect all positional args (before flags) as content
-      const contentParts = [];
-      for (let i = 1; i < args.length; i++) {
-        if (args[i].startsWith('--')) break;
-        contentParts.push(args[i]);
+    // ── Layered Context Commands (OpenViking-inspired) ─────────────────
+    case 'index': {
+      const idx = store.memoryIndex();
+      console.log(JSON.stringify(idx, null, 2));
+      break;
+    }
+
+    case 'context': {
+      const tag = flagVal('--tag');
+      const skill = flagVal('--skill');
+      const entityType = flagVal('--entity-type');
+      const days = flagInt('--days');
+      const limit = flagInt('--limit', 20);
+      if (!tag && !skill && !entityType && !days) {
+        return usage('context [--tag <tag>] [--skill <name>] [--entity-type <type>] [--days <n>] [--limit 20]');
       }
-      const content = contentParts.join(' ');
+      const ctx = store.loadContext({ tag, skill, entityType, days, limit });
+      if (ctx.skillMemory) {
+        console.log(`\n${c.cyan('=== Skill Experience Memory ===')}\n`);
+        console.log(ctx.skillMemory);
+      }
+      if (ctx.facts.length) {
+        console.log(`\n${c.cyan('=== Facts')} (${ctx.facts.length}) ===\n`);
+        for (const f of ctx.facts) {
+          console.log(`  ${c.bold(f.id)} ${f.content}`);
+          if (f.tags.length) console.log(`    ${c.dim(f.tags.join(', '))}`);
+        }
+      }
+      if (ctx.lessons.length) {
+        console.log(`\n${c.cyan('=== Lessons')} (${ctx.lessons.length}) ===\n`);
+        for (const l of ctx.lessons) {
+          const icon = l.outcome === 'positive' ? '✅' : l.outcome === 'negative' ? '❌' : '➖';
+          console.log(`  ${icon} ${c.bold(l.id)} ${l.action}`);
+          console.log(`    ${c.dim(l.insight)}`);
+        }
+      }
+      if (ctx.entities.length) {
+        console.log(`\n${c.cyan('=== Entities')} (${ctx.entities.length}) ===\n`);
+        for (const e of ctx.entities) {
+          console.log(`  ${c.bold(e.name)} [${e.entityType}]`);
+        }
+      }
+      if (!ctx.facts.length && !ctx.lessons.length && !ctx.entities.length && !ctx.skillMemory) {
+        console.log(c.yellow('No matching context found.'));
+      }
+      break;
+    }
+
+    case 'skill-mem': {
+      const skillName = args[1];
+      if (!skillName) return usage('skill-mem <skill-name>');
+      const mem = store.getSkillMemory(skillName);
+      if (mem) {
+        console.log(mem);
+      } else {
+        console.log(c.yellow(`No experience memory for skill "${skillName}".`));
+        console.log(c.dim('Record one with: remember "lesson learned" --skill ' + skillName));
+      }
+      break;
+    }
+
+    case 'skill-list': {
+      const mems = store.listSkillMemories();
+      if (mems.length === 0) {
+        console.log(c.yellow('No skill experience memories yet.'));
+      } else {
+        console.log(`\n${c.cyan('Skill Experience Memories')} (${mems.length}):\n`);
+        for (const m of mems) {
+          console.log(`  📦 ${c.bold(m.skill)} — ${m.entries} entries, updated ${m.lastModified}`);
+        }
+      }
+      break;
+    }
+
+    case 'remember': {
+      const content = positionalArgs().join(' ');
       if (!content) return usage('remember <content> [--tags t1,t2] [--source conversation] [--confidence 1.0]');
       const tags = flagVal('--tags', '').split(',').filter(Boolean);
       const source = flagVal('--source', 'conversation');
       const confidence = parseFloat(flagVal('--confidence', '1.0'));
-      const fact = store.remember(content, { tags, source, confidence });
+      const skill = flagVal('--skill');
+      const fact = store.remember(content, { tags, source, confidence, skill });
       console.log(`${c.green('✓')} Remembered: ${c.bold(fact.id)}`);
       console.log(`  "${content}"`);
       if (tags.length) console.log(`  Tags: ${tags.join(', ')}`);
@@ -81,7 +169,7 @@ function main() {
     }
 
     case 'recall': {
-      const query = args.slice(1).filter(a => !a.startsWith('--')).join(' ');
+      const query = positionalArgs().join(' ');
       if (!query) return usage('recall <query> [--limit 10]');
       const limit = flagInt('--limit', 10);
       const results = store.recall(query, { limit });
@@ -235,22 +323,50 @@ function main() {
       const now = new Date().toISOString();
       const today = now.slice(0, 10);
 
+      // Gather richer analysis
+      const idx = store.memoryIndex ? store.memoryIndex() : null;
+      const topTags = idx ? idx.topTags.slice(0, 10).join(', ') : '(N/A)';
+      const recentFactCount = idx ? idx.recentFacts.length : 0;
+      const newEntities = idx ? idx.entitySummary.slice(0, 5).join(', ') : '(N/A)';
+      const skillMems = idx ? idx.skillMemories : [];
+      const recentLessons = idx ? idx.recentLessons : [];
+
       // Write reflection
       const reflectionDir = path.join(MEMORY_DIR, 'reflections');
+      if (!fs.existsSync(reflectionDir)) fs.mkdirSync(reflectionDir, { recursive: true });
       const reflectionFile = path.join(reflectionDir, `${today}.md`);
-      const content = [
+
+      const sections = [
         `# Reflection — ${today}`,
         '',
         `## Memory Health`,
         `- Facts: ${s.facts.active} active (🔥${s.facts.hot} 🟡${s.facts.warm} ❄️${s.facts.cold})`,
         `- Lessons: ${s.lessons}`,
         `- Entities: ${s.entities}`,
+        `- Skill memories: ${skillMems.length}`,
         `- Archived files: ${s.archived}`,
+        '',
+        `## Recent Activity (3 days)`,
+        `- New facts: ${recentFactCount}`,
+        `- Top tags: ${topTags}`,
+        '',
+        `## Entities`,
+        `- Recent: ${newEntities}`,
+        '',
+        `## Skill Experience`,
+        ...(skillMems.length > 0
+          ? skillMems.map(sm => `- **${sm.skill}**: ${sm.entries} entries (last: ${sm.lastModified})`)
+          : ['- _(none)_']),
+        '',
+        `## Recent Lessons`,
+        ...(recentLessons.length > 0
+          ? recentLessons.map(l => `- [${l.outcome}] ${l.action}`)
+          : ['- _(none)_']),
         '',
         `## Notes`,
         '_(Add reflections here)_',
-      ].join('\n');
-      require('fs').writeFileSync(reflectionFile, content);
+      ];
+      fs.writeFileSync(reflectionFile, sections.join('\n'));
 
       store.index.lastReflection = now;
       store._saveIndex();
@@ -261,7 +377,10 @@ function main() {
       console.log(`  Facts:    ${s.facts.active} active (🔥${s.facts.hot} hot, 🟡${s.facts.warm} warm, ❄️${s.facts.cold} cold)`);
       console.log(`  Lessons:  ${s.lessons}`);
       console.log(`  Entities: ${s.entities}`);
+      console.log(`  Skills:   ${skillMems.length} with experience`);
       console.log(`  Archived: ${s.archived} files`);
+      if (recentFactCount > 0) console.log(`  Recent:   ${recentFactCount} facts in last 3 days`);
+      if (topTags !== '(N/A)') console.log(`  Top tags: ${topTags}`);
       break;
     }
 
@@ -306,10 +425,10 @@ function main() {
     }
 
     case 'search': {
-      const query = args.slice(1).filter(a => !a.startsWith('--')).join(' ');
+      const query = positionalArgs().join(' ');
       if (!query) return usage('search <query>');
       const limit = flagInt('--limit', 20);
-      const results = searchFiles(MEMORY_DIR, query, { limit });
+      const results = smartSearch(MEMORY_DIR, query, { limit });
       if (results.length === 0) {
         console.log(c.yellow('No matches found in Markdown files.'));
       } else {
@@ -345,13 +464,65 @@ function main() {
       break;
     }
 
+    // ── Session Lifecycle (simulate mem9 hooks) ───────────────────────
+    case 'session-start': {
+      // Simulates mem9's before_prompt_build: load index + recent context
+      console.log('📥 Session Start — Loading memory context...\n');
+      const idx = store.memoryIndex();
+      const { overview, topTags, recentFacts, recentLessons, skillMemories } = idx;
+
+      console.log(`Memory: ${overview.facts} facts (🔥${overview.hot} 🟡${overview.warm} ❄️${overview.cold}) | ${overview.lessons} lessons | ${overview.entities} entities`);
+      if (topTags.length) console.log(`Tags: ${topTags.slice(0, 8).join(', ')}`);
+      if (recentFacts.length) {
+        console.log(`\nRecent (${recentFacts.length}):`);
+        for (const f of recentFacts.slice(0, 5)) {
+          console.log(`  • ${f.preview}${f.tags.length ? ' ' + c.dim(f.tags.join(', ')) : ''}`);
+        }
+      }
+      if (recentLessons.length) {
+        console.log(`\nLessons:`);
+        for (const l of recentLessons.slice(0, 3)) {
+          console.log(`  • [${l.outcome}] ${l.action}`);
+        }
+      }
+      if (skillMemories.length) {
+        console.log(`\nSkill experience: ${skillMemories.map(s => s.skill).join(', ')}`);
+      }
+
+      // Also output JSON for programmatic use
+      if (flag('--json')) {
+        console.log('\n---JSON---');
+        console.log(JSON.stringify(idx, null, 2));
+      }
+      break;
+    }
+
+    case 'session-end': {
+      // Simulates mem9's before_reset + agent_end: save session summary
+      const summary = positionalArgs().join(' ');
+      if (!summary) return usage('session-end <session summary text>');
+
+      console.log('📤 Session End — Saving summary...\n');
+      const fact = store.remember(summary, {
+        tags: ['session-summary', `date:${new Date().toISOString().slice(0, 10)}`],
+        source: 'session-end',
+      });
+      console.log(`${c.green('✓')} Session summary saved: ${c.bold(fact.id)}`);
+      console.log(`  "${summary.slice(0, 100)}${summary.length > 100 ? '...' : ''}"`);
+      break;
+    }
+
     default:
       console.log(`
-🧠 Smart Agent Memory v1.0.0
+🧠 Smart Agent Memory v2.0.0
    Cross-platform memory system for OpenClaw agents
 
 Commands:
-  ${c.bold('remember')} <content> [--tags t1,t2]     Store a fact
+  ${c.bold('index')}                                   ${c.cyan('★')} Compact memory index (read FIRST, saves tokens)
+  ${c.bold('context')}  [--tag x] [--skill x] [--days n]  ${c.cyan('★')} Load scoped context on demand
+  ${c.bold('skill-mem')} <skill-name>                  ${c.cyan('★')} Get skill experience memory
+  ${c.bold('skill-list')}                              ${c.cyan('★')} List all skill experience memories
+  ${c.bold('remember')} <content> [--tags t1,t2] [--skill name]  Store a fact (with optional skill tag)
   ${c.bold('recall')}   <query> [--limit 10]          Search facts
   ${c.bold('forget')}   <id>                          Delete a fact
   ${c.bold('facts')}    [--tags t1] [--limit 50]      List all facts
@@ -365,10 +536,12 @@ Commands:
   ${c.bold('stats')}                                   Memory health dashboard
   ${c.bold('search')}   <query>                        Full-text search .md files
   ${c.bold('temperature')}                             Show file temperature report
+  ${c.bold('session-start')}                            ${c.cyan('★')} Load memory context (run at conversation start)
+  ${c.bold('session-end')} <summary>                    ${c.cyan('★')} Save session summary (run before reset/end)
   ${c.bold('export')}                                  Export all data as JSON
 
 Memory dir: ${MEMORY_DIR}
-Backend:    ${backend === 'sqlite' ? '⚡ SQLite + FTS5 (better-sqlite3)' : '📄 JSON (install better-sqlite3 for SQLite upgrade)'}
+Backend:    ${backend === 'sqlite' ? '⚡ SQLite + FTS5 (node:sqlite)' : '📄 JSON (upgrade to Node >= 22.5 for SQLite)'}
 `);
   }
 }

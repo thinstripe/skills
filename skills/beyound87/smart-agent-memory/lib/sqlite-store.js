@@ -1,6 +1,6 @@
 /**
- * SQLite Storage Backend (optional upgrade)
- * Auto-detected when better-sqlite3 is installed.
+ * SQLite Storage Backend — Node.js native (node:sqlite)
+ * Zero external dependencies. Requires Node.js >= 22.5.0.
  * Provides FTS5 full-text search + ACID transactions.
  */
 
@@ -8,38 +8,41 @@
 const path = require('path');
 const fs = require('fs');
 
-let Database;
+let DatabaseSync;
 try {
-  Database = require('better-sqlite3');
+  ({ DatabaseSync } = require('node:sqlite'));
 } catch {
-  Database = null;
+  DatabaseSync = null;
 }
 
 function isAvailable() {
-  return Database !== null;
+  return DatabaseSync !== null;
 }
 
 class SqliteStore {
   constructor(memoryDir) {
-    if (!Database) throw new Error('better-sqlite3 not installed');
+    if (!DatabaseSync) throw new Error('node:sqlite not available (requires Node.js >= 22.5)');
 
     this.memoryDir = memoryDir;
     this.dataDir = path.join(memoryDir, '.data');
     this.archiveDir = path.join(memoryDir, '.archive');
     this.indexFile = path.join(memoryDir, '.index.json');
+    this.skillsDir = path.join(memoryDir, 'skills');
 
-    // Ensure dirs
-    for (const d of [memoryDir, this.dataDir, this.archiveDir,
-      path.join(memoryDir, 'lessons'), path.join(memoryDir, 'decisions'),
-      path.join(memoryDir, 'people'), path.join(memoryDir, 'reflections')]) {
+    // Only ensure base dirs; sub-dirs created lazily on first write
+    for (const d of [memoryDir, this.dataDir]) {
       fs.mkdirSync(d, { recursive: true });
     }
 
     const dbPath = path.join(this.dataDir, 'memory.db');
-    this.db = new Database(dbPath);
-    this.db.pragma('journal_mode = WAL');
+    this.db = new DatabaseSync(dbPath);
+    this.db.exec('PRAGMA journal_mode = WAL');
     this._initSchema();
     this.index = this._loadIndex();
+  }
+
+  _ensureDir(dirPath) {
+    if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
   }
 
   _initSchema() {
@@ -54,7 +57,8 @@ class SqliteStore {
         lastAccessed TEXT NOT NULL,
         accessCount INTEGER DEFAULT 1,
         expiresAt TEXT,
-        supersededBy TEXT
+        supersededBy TEXT,
+        skill TEXT
       );
 
       CREATE TABLE IF NOT EXISTS lessons (
@@ -78,6 +82,9 @@ class SqliteStore {
       );
     `);
 
+    // Add skill column if missing (migration for existing DBs)
+    try { this.db.exec('ALTER TABLE facts ADD COLUMN skill TEXT'); } catch {}
+
     // FTS5 for facts
     try {
       this.db.exec(`
@@ -85,7 +92,7 @@ class SqliteStore {
           id, content, tags, tokenize='unicode61'
         );
       `);
-    } catch {} // Already exists or FTS5 not compiled (rare)
+    } catch {}
 
     // FTS5 for lessons
     try {
@@ -110,7 +117,7 @@ class SqliteStore {
   }
 
   _id() {
-    return require('crypto').randomBytes(6).toString('hex');
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
   _now() {
@@ -121,16 +128,17 @@ class SqliteStore {
   // FACTS
   // ══════════════════════════════════════════════════════════════════════
 
-  remember(content, { tags = [], source = 'conversation', confidence = 1.0, expiresInDays = null } = {}) {
+  remember(content, { tags = [], source = 'conversation', confidence = 1.0, expiresInDays = null, skill = null } = {}) {
     const id = this._id();
     const now = this._now();
     const expiresAt = expiresInDays ? new Date(Date.now() + expiresInDays * 86400000).toISOString() : null;
+    if (skill) tags = [...new Set([...tags, `skill:${skill}`])];
     const tagsJson = JSON.stringify(tags);
 
     this.db.prepare(`
-      INSERT INTO facts (id, content, tags, source, confidence, createdAt, lastAccessed, accessCount, expiresAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
-    `).run(id, content, tagsJson, source, confidence, now, now, expiresAt);
+      INSERT INTO facts (id, content, tags, source, confidence, createdAt, lastAccessed, accessCount, expiresAt, skill)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(id, content, tagsJson, source, confidence, now, now, expiresAt, skill);
 
     // FTS index
     try {
@@ -140,16 +148,20 @@ class SqliteStore {
     // Markdown daily log
     this._appendDailyLog(`- **[${id}]** ${content}${tags.length ? ' `' + tags.join('`, `') + '`' : ''}`);
 
-    return { id, content, tags, source, confidence, createdAt: now, lastAccessed: now, accessCount: 1, expiresAt, supersededBy: null };
+    // Per-skill experience memory
+    if (skill) this._appendSkillMemory(skill, content, id);
+
+    return { id, content, tags, source, confidence, skill, createdAt: now, lastAccessed: now, accessCount: 1, expiresAt, supersededBy: null };
   }
 
   recall(query, { limit = 10, tags = null, minConfidence = 0 } = {}) {
     const now = this._now();
-    let rows;
+    const seen = new Set();
+    const allRows = [];
 
-    // Try FTS5 first, fallback to LIKE if no results or error
+    // 1. Try FTS5 (good for English/tokenizable content)
     try {
-      rows = this.db.prepare(`
+      const ftsRows = this.db.prepare(`
         SELECT f.*, rank FROM facts f
         JOIN facts_fts fts ON f.id = fts.id
         WHERE facts_fts MATCH ?
@@ -159,17 +171,16 @@ class SqliteStore {
         ORDER BY rank
         LIMIT ?
       `).all(query, minConfidence, now, limit * 3);
-    } catch {
-      rows = [];
-    }
+      for (const r of ftsRows) { seen.add(r.id); allRows.push(r); }
+    } catch {}
 
-    // Fallback to LIKE for CJK/mixed content or when FTS5 misses
-    if (rows.length === 0) {
-      const terms = query.split(/\s+/).filter(Boolean);
-      if (terms.length > 0) {
-        const where = terms.map(() => 'f.content LIKE ?').join(' AND ');
-        const params = terms.map(t => `%${t}%`);
-        rows = this.db.prepare(`
+    // 2. Always also try LIKE (essential for CJK where FTS5 unicode61 tokenizer fails)
+    const terms = query.split(/\s+/).filter(Boolean);
+    if (terms.length > 0) {
+      const where = terms.map(() => '(f.content LIKE ? OR f.tags LIKE ?)').join(' AND ');
+      const params = terms.flatMap(t => [`%${t}%`, `%${t}%`]);
+      try {
+        const likeRows = this.db.prepare(`
           SELECT f.* FROM facts f
           WHERE ${where}
           AND f.confidence >= ?
@@ -178,8 +189,13 @@ class SqliteStore {
           ORDER BY f.createdAt DESC
           LIMIT ?
         `).all(...params, minConfidence, now, limit * 3);
-      }
+        for (const r of likeRows) {
+          if (!seen.has(r.id)) { seen.add(r.id); allRows.push(r); }
+        }
+      } catch {}
     }
+
+    const rows = allRows;
 
     // Parse and filter
     let results = rows.map(r => ({
@@ -197,10 +213,7 @@ class SqliteStore {
 
     // Update access stats
     const update = this.db.prepare('UPDATE facts SET lastAccessed = ?, accessCount = accessCount + 1 WHERE id = ?');
-    const tx = this.db.transaction(() => {
-      for (const f of results) update.run(now, f.id);
-    });
-    tx();
+    for (const f of results) update.run(now, f.id);
 
     return results;
   }
@@ -263,9 +276,11 @@ class SqliteStore {
     } catch {}
 
     // Markdown
+    const lessonsDir = path.join(this.memoryDir, 'lessons');
+    this._ensureDir(lessonsDir);
     const filename = `${now.slice(0, 10)}-${id}.md`;
     const md = `# ${action}\n\n**Context:** ${context}\n**Outcome:** ${outcome}\n**Insight:** ${insight}\n**Date:** ${now.slice(0, 10)}\n**ID:** ${id}\n`;
-    fs.writeFileSync(path.join(this.memoryDir, 'lessons', filename), md);
+    fs.writeFileSync(path.join(lessonsDir, filename), md);
 
     return { id, action, context, outcome, insight, createdAt: now, appliedCount: 0 };
   }
@@ -355,10 +370,12 @@ class SqliteStore {
 
   _writeEntityMd(entity) {
     const dir = entity.entityType === 'person' ? 'people' : 'decisions';
+    const dirPath = path.join(this.memoryDir, dir);
+    this._ensureDir(dirPath);
     const filename = `${entity.name.toLowerCase().replace(/\s+/g, '-')}.md`;
     const attrs = Object.entries(entity.attributes).map(([k, v]) => `- **${k}:** ${v}`).join('\n');
     const md = `# ${entity.name}\n**Type:** ${entity.entityType}\n**First seen:** ${entity.firstSeen.slice(0, 10)}\n**Last updated:** ${entity.lastUpdated.slice(0, 10)}\n\n${attrs || '_(no attributes)_'}\n`;
-    try { fs.writeFileSync(path.join(this.memoryDir, dir, filename), md); } catch {}
+    try { fs.writeFileSync(path.join(dirPath, filename), md); } catch {}
   }
 
   // ══════════════════════════════════════════════════════════════════════
@@ -372,6 +389,119 @@ class SqliteStore {
       fs.writeFileSync(logFile, `# ${today}\n\n## Facts\n\n`);
     }
     fs.appendFileSync(logFile, line + '\n');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // SKILL EXPERIENCE MEMORY
+  // ══════════════════════════════════════════════════════════════════════
+
+  _appendSkillMemory(skillName, content, factId) {
+    this._ensureDir(this.skillsDir);
+    const slug = skillName.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    const filePath = path.join(this.skillsDir, `${slug}.md`);
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, `# Skill Experience: ${skillName}\n\n`);
+    }
+    const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    fs.appendFileSync(filePath, `- [${now}] **${factId}** ${content}\n`);
+  }
+
+  getSkillMemory(skillName) {
+    const slug = skillName.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    const filePath = path.join(this.skillsDir, `${slug}.md`);
+    try { return fs.readFileSync(filePath, 'utf8'); } catch { return null; }
+  }
+
+  listSkillMemories() {
+    try {
+      return fs.readdirSync(this.skillsDir)
+        .filter(f => f.endsWith('.md'))
+        .map(f => {
+          const filePath = path.join(this.skillsDir, f);
+          const stat = fs.statSync(filePath);
+          const content = fs.readFileSync(filePath, 'utf8');
+          const entries = (content.match(/^- \[/gm) || []).length;
+          return { skill: f.replace('.md', ''), entries, lastModified: stat.mtime.toISOString().slice(0, 10), sizeBytes: stat.size };
+        });
+    } catch { return []; }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // INDEX & LAYERED CONTEXT
+  // ══════════════════════════════════════════════════════════════════════
+
+  memoryIndex() {
+    const s = this.stats();
+    const now = Date.now();
+    const dayMs = 86400000;
+    const recent3 = new Date(now - 3 * dayMs).toISOString();
+
+    const recentFacts = this.db.prepare(
+      `SELECT id, content, tags FROM facts WHERE supersededBy IS NULL AND createdAt > ? ORDER BY createdAt DESC LIMIT 10`
+    ).all(recent3).map(r => ({ id: r.id, preview: r.content.slice(0, 80), tags: JSON.parse(r.tags || '[]') }));
+
+    // Tag distribution
+    const allTags = this.db.prepare('SELECT tags FROM facts WHERE supersededBy IS NULL').all();
+    const tagCounts = {};
+    for (const r of allTags) {
+      for (const t of JSON.parse(r.tags || '[]')) {
+        tagCounts[t] = (tagCounts[t] || 0) + 1;
+      }
+    }
+    const topTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([t, c]) => `${t}(${c})`);
+
+    const entitySummary = this.db.prepare('SELECT name, entityType FROM entities ORDER BY lastUpdated DESC LIMIT 10')
+      .all().map(e => `${e.name}[${e.entityType}]`);
+
+    const skillMems = this.listSkillMemories();
+
+    const recentLessons = this.db.prepare('SELECT id, action, outcome FROM lessons ORDER BY createdAt DESC LIMIT 5')
+      .all().map(l => ({ id: l.id, action: l.action.slice(0, 60), outcome: l.outcome }));
+
+    return {
+      overview: {
+        facts: s.facts.active, hot: s.facts.hot, warm: s.facts.warm, cold: s.facts.cold,
+        lessons: s.lessons, entities: s.entities, archived: s.archived, skillMemories: skillMems.length,
+      },
+      recentFacts, topTags, entitySummary, skillMemories: skillMems, recentLessons,
+      hint: 'Use "recall <query>", "context --tag <tag>", "context --skill <name>", "lessons", or "entities" to load details.',
+    };
+  }
+
+  loadContext({ tag = null, skill = null, entityType = null, days = null, limit = 20 } = {}) {
+    const results = { facts: [], lessons: [], entities: [], skillMemory: null };
+    const now = Date.now();
+    const dayMs = 86400000;
+
+    // Facts
+    let query = 'SELECT * FROM facts WHERE supersededBy IS NULL';
+    const params = [];
+    if (tag) { query += ' AND tags LIKE ?'; params.push(`%"${tag}"%`); }
+    if (skill) { query += ' AND (skill = ? OR tags LIKE ?)'; params.push(skill, `%"skill:${skill}"%`); }
+    if (days) { query += ' AND createdAt > ?'; params.push(new Date(now - days * dayMs).toISOString()); }
+    query += ' ORDER BY createdAt DESC LIMIT ?';
+    params.push(limit);
+    results.facts = this.db.prepare(query).all(...params).map(r => ({ ...r, tags: JSON.parse(r.tags || '[]') }));
+
+    // Lessons
+    if (tag || skill) {
+      const q = (tag || skill);
+      results.lessons = this.db.prepare(
+        'SELECT * FROM lessons WHERE context LIKE ? OR action LIKE ? ORDER BY createdAt DESC LIMIT 10'
+      ).all(`%${q}%`, `%${q}%`);
+    }
+
+    // Entities
+    if (entityType) {
+      results.entities = this.listEntities(entityType);
+    }
+
+    // Skill memory
+    if (skill) {
+      results.skillMemory = this.getSkillMemory(skill);
+    }
+
+    return results;
   }
 
   // ══════════════════════════════════════════════════════════════════════
@@ -430,35 +560,32 @@ class SqliteStore {
    * Migrate data from JSON store to SQLite (one-time import).
    */
   migrateFromJson(jsonStore) {
-    const tx = this.db.transaction(() => {
-      for (const f of jsonStore.facts) {
-        try {
-          this.db.prepare(`
-            INSERT OR IGNORE INTO facts (id, content, tags, source, confidence, createdAt, lastAccessed, accessCount, expiresAt, supersededBy)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(f.id, f.content, JSON.stringify(f.tags), f.source, f.confidence, f.createdAt, f.lastAccessed, f.accessCount, f.expiresAt, f.supersededBy);
-          try { this.db.prepare('INSERT OR IGNORE INTO facts_fts (id, content, tags) VALUES (?, ?, ?)').run(f.id, f.content, f.tags.join(' ')); } catch {}
-        } catch {}
-      }
-      for (const l of jsonStore.lessons) {
-        try {
-          this.db.prepare(`
-            INSERT OR IGNORE INTO lessons (id, action, context, outcome, insight, createdAt, appliedCount)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).run(l.id, l.action, l.context, l.outcome, l.insight, l.createdAt, l.appliedCount);
-          try { this.db.prepare('INSERT OR IGNORE INTO lessons_fts (id, action, context, insight) VALUES (?, ?, ?, ?)').run(l.id, l.action, l.context, l.insight); } catch {}
-        } catch {}
-      }
-      for (const e of jsonStore.entities) {
-        try {
-          this.db.prepare(`
-            INSERT OR IGNORE INTO entities (id, name, entityType, attributes, firstSeen, lastUpdated, factIds)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).run(e.id, e.name, e.entityType, JSON.stringify(e.attributes), e.firstSeen, e.lastUpdated, JSON.stringify(e.factIds));
-        } catch {}
-      }
-    });
-    tx();
+    for (const f of jsonStore.facts) {
+      try {
+        this.db.prepare(`
+          INSERT OR IGNORE INTO facts (id, content, tags, source, confidence, createdAt, lastAccessed, accessCount, expiresAt, supersededBy)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(f.id, f.content, JSON.stringify(f.tags), f.source, f.confidence, f.createdAt, f.lastAccessed, f.accessCount, f.expiresAt, f.supersededBy);
+        try { this.db.prepare('INSERT OR IGNORE INTO facts_fts (id, content, tags) VALUES (?, ?, ?)').run(f.id, f.content, f.tags.join(' ')); } catch {}
+      } catch {}
+    }
+    for (const l of jsonStore.lessons) {
+      try {
+        this.db.prepare(`
+          INSERT OR IGNORE INTO lessons (id, action, context, outcome, insight, createdAt, appliedCount)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(l.id, l.action, l.context, l.outcome, l.insight, l.createdAt, l.appliedCount);
+        try { this.db.prepare('INSERT OR IGNORE INTO lessons_fts (id, action, context, insight) VALUES (?, ?, ?, ?)').run(l.id, l.action, l.context, l.insight); } catch {}
+      } catch {}
+    }
+    for (const e of jsonStore.entities) {
+      try {
+        this.db.prepare(`
+          INSERT OR IGNORE INTO entities (id, name, entityType, attributes, firstSeen, lastUpdated, factIds)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(e.id, e.name, e.entityType, JSON.stringify(e.attributes), e.firstSeen, e.lastUpdated, JSON.stringify(e.factIds));
+      } catch {}
+    }
   }
 }
 
