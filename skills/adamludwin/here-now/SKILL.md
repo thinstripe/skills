@@ -10,7 +10,7 @@ description: >
 
 # here.now
 
-**Skill version: 1.6.6**
+**Skill version: 1.6.7**
 
 Create a live URL from any file or folder. Static hosting only.
 
@@ -185,5 +185,67 @@ Both old and new route families are supported during the transition. Existing in
 - Link endpoints: `/api/v1/links` and `/api/v1/links/:location`
 - Root location sentinel for path params remains `__root__`
 - Handle/link changes can take up to 60 seconds to propagate globally (Cloudflare KV)
+
+## Custom domains
+
+Bring your own domain (e.g. `example.com`) and serve artifacts from it. Requires a paid plan (Hobby or above).
+
+### Add a custom domain
+
+```bash
+curl -sS https://here.now/api/v1/domains \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"domain": "example.com"}'
+```
+
+Response includes DNS instructions. Point an ALIAS record (or CNAME for subdomains) to `fallback.here.now`. SSL is provisioned automatically.
+
+### Check domain status
+
+```bash
+curl -sS https://here.now/api/v1/domains/example.com \
+  -H "Authorization: Bearer {API_KEY}"
+```
+
+Status is `pending` until DNS is verified and SSL is active, then becomes `active`.
+
+### Link an artifact to a custom domain
+
+Use the `domain` parameter when creating a link:
+
+```bash
+curl -sS https://here.now/api/v1/links \
+  -H "Authorization: Bearer {API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"location": "", "slug": "bright-canvas-a7k2", "domain": "example.com"}'
+```
+
+An empty `location` makes it the homepage (`https://example.com/`). Use `"location": "docs"` for `https://example.com/docs/`.
+
+### List custom domains
+
+```bash
+curl -sS https://here.now/api/v1/domains \
+  -H "Authorization: Bearer {API_KEY}"
+```
+
+### Remove a custom domain
+
+```bash
+curl -sS -X DELETE https://here.now/api/v1/domains/example.com \
+  -H "Authorization: Bearer {API_KEY}"
+```
+
+Removes the domain and all links under it.
+
+### Key points
+
+- Custom domains: 1 on Free, up to 5 on Hobby
+- Most domains use an ALIAS record (sometimes called ANAME or CNAME flattening)
+- Subdomains (e.g. `docs.example.com`) can also use a standard CNAME record
+- Domain endpoints: `/api/v1/domains` and `/api/v1/domains/:domain`
+- Links to custom domains use the same `/api/v1/links` endpoint with an added `domain` parameter
+- Changes propagate globally in up to 60 seconds (Cloudflare KV)
 
 Full docs: https://here.now/docs

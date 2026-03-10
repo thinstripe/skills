@@ -109,8 +109,8 @@ Creates a new artifact with a random slug. Works with or without authentication.
 ```json
 {
   "files": [
-    { "path": "index.html", "size": 1234, "contentType": "text/html; charset=utf-8" },
-    { "path": "assets/app.js", "size": 999, "contentType": "text/javascript; charset=utf-8" }
+    { "path": "index.html", "size": 1234, "contentType": "text/html; charset=utf-8", "hash": "a1b2c3d4..." },
+    { "path": "assets/app.js", "size": 999, "contentType": "text/javascript; charset=utf-8", "hash": "e5f6a7b8..." }
   ],
   "ttlSeconds": null,
   "viewer": {
@@ -121,7 +121,8 @@ Creates a new artifact with a random slug. Works with or without authentication.
 }
 ```
 
-- `files` (required): array of `{ path, size, contentType }`. At least one file. Paths should be relative to the artifact root (e.g. `index.html`, `assets/style.css`) — don't include a parent directory name like `my-project/index.html`.
+- `files` (required): array of `{ path, size, contentType, hash }`. At least one file. Paths should be relative to the artifact root (e.g. `index.html`, `assets/style.css`) — don't include a parent directory name like `my-project/index.html`.
+- `hash` (optional): SHA-256 hex digest (64 lowercase chars) of the file contents. When updating an existing artifact, files whose hash matches the previous version are skipped from `upload.uploads[]` and listed in `upload.skipped[]` instead. The server copies them automatically at finalize. Omitting `hash` gives the default behavior (all files require upload).
 - `ttlSeconds` (optional): expiry in seconds. Ignored for anonymous artifacts (always 24h).
 - `viewer` (optional): metadata for auto-viewer pages (only used when no `index.html`).
 
@@ -145,6 +146,7 @@ Creates a new artifact with a random slug. Works with or without authentication.
         "headers": { "Content-Type": "text/html; charset=utf-8" }
       }
     ],
+    "skipped": ["assets/app.js"],
     "finalizeUrl": "https://here.now/api/v1/artifact/bright-canvas-a7k2/finalize",
     "expiresInSeconds": 3600
   }
@@ -154,6 +156,7 @@ Creates a new artifact with a random slug. Works with or without authentication.
 **This step only creates a pending artifact. It is not complete yet.**
 
 - You **must upload every file** in `upload.uploads[]`.
+- Files in `upload.skipped[]` are unchanged from the previous version and will be copied server-side at finalize. Do not upload them.
 - Then you **must finalize** with `POST upload.finalizeUrl` and body `{ "versionId": "..." }`.
 - For brand-new slugs, `siteUrl` may return 404 until finalize succeeds.
 - For updates to an existing slug, the previous version can stay live until finalize switches to the new version.
@@ -226,6 +229,8 @@ Makes the artifact live by flipping the slug pointer to the new version.
 
 Same request body as create. Returns new presigned upload URLs and a new `finalizeUrl`.
 The update response also includes `status: "pending"` and `isLive: false` to indicate the new version is not live until finalize.
+
+**Incremental deploys:** Include `hash` (SHA-256 hex) on each file. Files whose hash matches the previous version appear in `upload.skipped[]` instead of `upload.uploads[]` — no upload needed. The server copies them at finalize. This is the recommended approach for iterative development.
 
 **Auth for owned artifacts:** requires `Authorization: Bearer <API_KEY>` matching the owner.
 
@@ -352,6 +357,37 @@ Returns all artifacts owned by the authenticated user.
 
 ---
 
+### Get artifact details
+
+`GET /api/v1/artifact/:slug` (alias: `GET /api/v1/publish/:slug`)
+
+Returns metadata and the full file manifest for an artifact you own.
+
+**Requires:** `Authorization: Bearer <API_KEY>` (owner only)
+
+**Response:**
+
+```json
+{
+  "slug": "bright-canvas-a7k2",
+  "siteUrl": "https://bright-canvas-a7k2.here.now/",
+  "status": "active",
+  "createdAt": "2026-02-18T...",
+  "updatedAt": "2026-02-18T...",
+  "expiresAt": null,
+  "currentVersionId": "01J...",
+  "pendingVersionId": null,
+  "manifest": [
+    { "path": "index.html", "size": 1234, "contentType": "text/html; charset=utf-8", "hash": "a1b2c3d4..." },
+    { "path": "assets/app.js", "size": 999, "contentType": "text/javascript; charset=utf-8", "hash": "e5f6a7b8..." }
+  ]
+}
+```
+
+The `manifest` array lists all files in the current live version with their paths, sizes, content types, and hashes (if available). File contents can be fetched from the live `siteUrl` (e.g. `https://bright-canvas-a7k2.here.now/index.html`).
+
+---
+
 ### Refresh upload URLs
 
 `POST /api/v1/artifact/:slug/uploads/refresh` (alias: `POST /api/v1/publish/:slug/uploads/refresh`)
@@ -428,11 +464,11 @@ Deletes your handle and all links under it.
 
 ---
 
-### Create a link under your handle
+### Create a link under your handle or custom domain
 
 `POST /api/v1/links`
 
-Links an artifact slug to a location under your handle.
+Links an artifact slug to a location under your handle or a custom domain.
 
 **Requires:** `Authorization: Bearer <API_KEY>`
 
@@ -446,6 +482,18 @@ Links an artifact slug to a location under your handle.
 ```
 
 Use an empty `location` to link at root (`https://yourname.here.now/`).
+
+To link to a custom domain instead of your handle, add the `domain` parameter:
+
+```json
+{
+  "location": "",
+  "slug": "bright-canvas-a7k2",
+  "domain": "example.com"
+}
+```
+
+This makes `https://example.com/` serve the artifact. The domain must be active (verified).
 
 ---
 
@@ -492,6 +540,100 @@ Changes which artifact slug a location points to.
 Removes a link by location. Use `__root__` for the root location.
 
 **Requires:** `Authorization: Bearer <API_KEY>`
+
+To delete a link from a custom domain (instead of your handle), add `?domain=example.com` as a query parameter.
+
+---
+
+### Add a custom domain
+
+`POST /api/v1/domains`
+
+Registers a custom domain for your account. Free plan: 1 domain. Hobby plan: up to 5 domains.
+
+**Requires:** `Authorization: Bearer <API_KEY>`
+
+**Request body:**
+
+```json
+{ "domain": "example.com" }
+```
+
+**Response:**
+
+```json
+{
+  "domain": "example.com",
+  "namespace_id": "uuid",
+  "status": "pending",
+  "dns_instructions": {
+    "type": "ALIAS",
+    "name": "example.com",
+    "target": "fallback.here.now",
+    "note": "Add an ALIAS record pointing to fallback.here.now. For subdomains, a CNAME record also works."
+  }
+}
+```
+
+After adding, configure DNS: add an ALIAS record (or CNAME for subdomains) pointing to `fallback.here.now`. SSL is provisioned automatically by Cloudflare once DNS is verified.
+
+---
+
+### List custom domains
+
+`GET /api/v1/domains`
+
+Returns all custom domains for the authenticated user, including their status and links.
+
+**Requires:** `Authorization: Bearer <API_KEY>`
+
+**Response:**
+
+```json
+{
+  "domains": [
+    {
+      "domain": "example.com",
+      "namespace_id": "uuid",
+      "status": "active",
+      "ssl_status": "active",
+      "created_at": "2026-03-09T...",
+      "verified_at": "2026-03-09T...",
+      "mounts": [
+        { "mount_path": "", "slug": "bright-canvas-a7k2" }
+      ]
+    }
+  ]
+}
+```
+
+For pending domains, this endpoint also polls Cloudflare for SSL verification status and updates automatically.
+
+---
+
+### Get custom domain status
+
+`GET /api/v1/domains/:domain`
+
+Returns details for a specific custom domain. Triggers on-demand verification for pending domains.
+
+**Requires:** `Authorization: Bearer <API_KEY>`
+
+---
+
+### Remove a custom domain
+
+`DELETE /api/v1/domains/:domain`
+
+Removes a custom domain and all links under it.
+
+**Requires:** `Authorization: Bearer <API_KEY>`
+
+**Response:**
+
+```json
+{ "deleted": true }
+```
 
 ---
 
