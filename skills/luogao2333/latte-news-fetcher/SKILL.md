@@ -1,6 +1,25 @@
 ---
 name: Latte-news-fetcher
-description: 新闻获取工具。支持获取新闻列表、绕过付费墙获取全文。使用场景：(1) 用户问"今天有什么新闻" (2) 用户提供新闻链接要求获取内容 (3) 用户想深入了解某条新闻。触发词：新闻、今日新闻、有什么新闻、付费墙、文章、阅读。
+version: 3.2.2
+description: |
+  新闻获取工具。支持获取新闻列表、绕过付费墙获取全文。
+  使用 archive.today、smry.ai、12ft.io 等公开服务访问付费内容。
+  触发词：新闻、今日新闻、付费墙、文章、阅读。
+metadata:
+  openclaw:
+    requires:
+      bins:
+        - node
+      writes:
+        - CONFIG/news-preferences.md
+    optionalEnv:
+      - TAVILY_API_KEY
+    install:
+      - kind: node
+        package: node-fetch
+        bins: []
+    homepage: https://github.com/luogao2333/Latte-news-fetcher
+    emoji: "📰"
 ---
 
 # Latte News Fetcher - 新闻获取工具 ☕

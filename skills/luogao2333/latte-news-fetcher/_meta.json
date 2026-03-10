@@ -3,9 +3,15 @@
   "slug": "latte-news-fetcher",
   "displayName": "Latte News Fetcher",
   "latest": {
-    "version": "3.2.0",
-    "publishedAt": 1772791157607,
-    "commit": "https://github.com/openclaw/skills/commit/519d8e07ed18694de86174fa8189a6b3f7a0857b"
+    "version": "1.0.0",
+    "publishedAt": 1773049940658,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "3.2.0",
+      "publishedAt": 1772791157607,
+      "commit": "https://github.com/openclaw/skills/commit/519d8e07ed18694de86174fa8189a6b3f7a0857b"
+    }
+  ]
 }
