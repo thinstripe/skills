@@ -3,11 +3,16 @@
   "slug": "scihub-paper-downloader",
   "displayName": "Scihub Paper Downloader",
   "latest": {
-    "version": "1.0.2",
-    "publishedAt": 1772431026679,
-    "commit": "https://github.com/openclaw/skills/commit/f7227c0b803af3ca44ab1b7fb8120454994d8f0e"
+    "version": "1.0.3",
+    "publishedAt": 1773000238941,
+    "commit": null
   },
   "history": [
+    {
+      "version": "1.0.2",
+      "publishedAt": 1772431026679,
+      "commit": "https://github.com/openclaw/skills/commit/f7227c0b803af3ca44ab1b7fb8120454994d8f0e"
+    },
     {
       "version": "1.0.0",
       "publishedAt": 1772332564956,

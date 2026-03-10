@@ -1,45 +1,16 @@
 ---
 name: scihub-paper-downloader
-description: "Download academic papers from Sci-Hub. Given a DOI, returns the PDF download URL."
-metadata:
-  openclaw:
-    emoji: "📚"
-    requires:
-      bins: [python3]
+description: "Get a PDF link from Sci-Hub for a DOI."
 ---
 
 # Sci-Hub Paper Downloader
 
-Get PDF download URLs from Sci-Hub by DOI. Tries official mirrors (sci-hub.se, sci-hub.st, sci-hub.ru) automatically.
+Given a DOI, use the bundled Python script to resolve a direct PDF URL through the current Sci-Hub and Sci-Net flow.
 
-## Usage
+Treat the script output as follows:
 
-```
-python3 {baseDir}/scihub-paper-downloader.py <DOI>
-```
-
-Output JSON:
-
-```json
-{"doi": "10.xxx", "pdf_url": "https://...", "mirror": "https://sci-hub.st", "status": "found"}
-```
-
-`status` is `found` when a PDF URL is available, `not_found` when all mirrors fail.
-
-## Downloading the PDF
-
-This skill only returns the URL. Use curl to download:
-
-```
-curl -L -o paper.pdf "<pdf_url>"
-```
-
-## Finding Papers
-
-To find a paper's DOI before using this skill:
-
-- **web_search** — general queries, fast
-- **Google Scholar** (`site:scholar.google.com`) — comprehensive academic search
-- **Semantic Scholar** (`site:semanticscholar.org`) — citation graph, related papers
-- **arXiv** (`site:arxiv.org`) — preprints (often free, no Sci-Hub needed)
-- **PubMed** (`site:pubmed.ncbi.nlm.nih.gov`) — biomedical literature
+- If it returns a URL, use that as the final PDF link.
+- If it returns `NOT_FOUND` and a second line starts with `OA_LINK `, treat that value as the OA entry link shown on the Sci-Hub page. It may be a publisher page, repository page, or another non-PDF landing page rather than a final PDF URL.
+- If it returns `NOT_FOUND` with no second line, report that Sci-Hub does not currently have the paper.
+- If it returns `MIRROR_ERROR`, report that Sci-Hub could not be resolved reliably and the result is inconclusive.
+- If it returns `INVALID_INPUT`, ask for a valid DOI.
