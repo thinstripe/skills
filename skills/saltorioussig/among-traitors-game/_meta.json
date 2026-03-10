@@ -3,9 +3,15 @@
   "slug": "among-traitors-game",
   "displayName": "Among Traitors",
   "latest": {
-    "version": "1.0.1",
-    "publishedAt": 1772604325892,
-    "commit": "https://github.com/openclaw/skills/commit/ca380f6fe422688128251b2ddcc70f310f5d21d2"
+    "version": "1.0.3",
+    "publishedAt": 1773165678688,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.1",
+      "publishedAt": 1772604325892,
+      "commit": "https://github.com/openclaw/skills/commit/ca380f6fe422688128251b2ddcc70f310f5d21d2"
+    }
+  ]
 }
