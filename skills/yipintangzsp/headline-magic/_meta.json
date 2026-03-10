@@ -1,11 +1,17 @@
 {
   "owner": "yipintangzsp",
   "slug": "headline-magic",
-  "displayName": "爆款标题魔法师",
+  "displayName": "Headline Magic",
   "latest": {
-    "version": "1.0.0",
-    "publishedAt": 1772807051144,
-    "commit": "https://github.com/openclaw/skills/commit/f111ac50c3f9190f67ed700972af3366c53093cd"
+    "version": "1.1.0",
+    "publishedAt": 1773111553235,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.0",
+      "publishedAt": 1772807051144,
+      "commit": "https://github.com/openclaw/skills/commit/f111ac50c3f9190f67ed700972af3366c53093cd"
+    }
+  ]
 }
