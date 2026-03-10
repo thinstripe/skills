@@ -1,226 +1,280 @@
 ---
-name: news-fetcher
-description: 绕过付费墙获取新闻文章的工具。用于当用户想要阅读某个付费新闻文章时。支持 WSJ、NYT、Bloomberg、Medium 等主流媒体。使用场景：(1) 用户提供新闻链接要求获取内容 (2) 用户询问某篇新闻报道的详细内容 (3) 用户想绕过付费墙阅读文章。触发词：新闻、付费墙、paywall、文章、阅读、获取、绕过。
+name: luogao-news-fetcher
+description: |
+  新闻获取与存档访问工具。获取新闻列表，访问公开存档版本。
+  通过官方网站、公开存档服务（archive.today、Wayback Machine）获取新闻内容。
+  触发词：新闻、今日新闻、文章、存档、阅读。
+metadata:
+  openclaw:
+    requires:
+      bins:
+        - node
+      writes:
+        - CONFIG/news-preferences.md
+    optionalEnv:
+      - TAVILY_API_KEY
+    install:
+      - kind: node
+        package: node-fetch
+        bins: []
+    emoji: "📰"
 ---
 
-# News Fetcher - 新闻获取工具
+# Luogao News Fetcher - 新闻获取与存档访问 ☕
 
-绕过付费墙，获取新闻文章完整内容。
-
-## 核心流程
-
-### ⚠️ 重要：两阶段工作流
-
-**第一阶段：浏览**
-1. 访问新闻网站首页（如 cn.wsj.com、cn.nikkei.com）
-2. 使用 browser 工具获取页面快照
-3. 提取新闻标题、摘要、链接
-4. 整理成清晰列表展示给用户
-
-**第二阶段：深挖（仅在用户请求时）**
-1. 用户指出感兴趣的文章
-2. 对该文章使用绕过技巧获取完整内容
-3. 如果无法绕过，找替代信源
-
-### 为什么分两阶段？
-
-- **效率**：首页新闻列表通常可以直接获取，无需绕过
-- **用户主导**：让用户决定想看什么，而不是盲目获取
-- **资源节约**：只对真正需要的文章使用绕过技巧
-
-## 详细流程
-
-**1. 识别信源 → 2. 选择策略 → 3. 执行获取 → 4. 回退方案**
+获取新闻列表，访问公开存档版本，深入了解新闻内容。
 
 ---
 
-## Step 1: 识别信源类型
+## 🚀 核心流程
 
-### 付费墙难度分级
+### 首次使用：初始化偏好
 
-| 难度 | 媒体 | 策略 |
-|------|------|------|
-| ⭐ | BBC, Reuters, AP, NPR | 直接访问 |
-| ⭐⭐ | Medium, Substack | 12ft.io / Reader Mode |
-| ⭐⭐⭐ | NYT, WaPo, Guardian | smry.ai / 禁用JS |
-| ⭐⭐⭐⭐ | Bloomberg, Economist | smry.ai → BPC扩展 → 找替代 |
-| ⭐⭐⭐⭐⭐ | WSJ, FT | **直接找替代信源** |
+**检查配置文件** `CONFIG/news-preferences.md`（workspace 根目录）
 
-详见 [付费墙难度矩阵](references/paywall-matrix.md)
+如果用户偏好为空，执行初始化：
+
+```
+询问用户：
+"你想要看哪些方面的新闻？可以选择以下类别，也可以告诉我你常看的网站："
+
+🌍 国际时事 - BBC、Reuters、Al Jazeera
+🇨🇳 国内要闻 - 人民网、新华网、澎湃新闻
+💰 财经金融 - 财联社、Bloomberg、华尔街见闻
+💻 科技互联网 - 36氪、The Verge、虎嗅
+⚽ 体育娱乐 - 虎扑、ESPN、新浪体育
+📊 商业市场 - 界面、财新、第一财经
+
+你也可以直接告诉我你想关注的网站。"
+```
+
+**保存偏好** → 写入 `CONFIG/news-preferences.md`（workspace 根目录）
 
 ---
 
-## Step 2: 选择获取策略
+### 日常使用：获取今日新闻
 
-### 策略 A: 直接访问（免费信源）
+**触发场景（两种）：**
 
-**首选信源：**
-- BBC.com
-- Reuters.com
-- APNews.com
-- NPR.org
-- ProPublica.org
+1. **通用请求**：用户问"今天有什么新闻"、"看看新闻"等
+   - → 读取用户偏好配置，获取偏好类别对应的网站
 
-**操作:** 直接 `web_fetch`
+2. **指定网站**：用户问"看看华尔街日报今天有什么新闻"、"BBC今天新闻"等
+   - → 直接访问用户指定的网站，跳过偏好检查
 
-### 策略 B: 绕过工具（中等难度）
+---
 
-**推荐顺序：**
+### 📰 获取新闻首页
+
+⚠️ **重要：主流媒体网站通常会阻止简单的 fetch 请求，必须使用正确的工具**
+
+#### 工具选择优先级
+
+| 优先级 | 工具 | 适用场景 | 说明 |
+|--------|------|----------|------|
+| 🔴 **首选** | `browser` | WSJ、Bloomberg、NYT、FT 等主流媒体 | 能处理 JS 渲染和复杂页面 |
+| 🟡 备选 | `web_fetch` | BBC、Reuters、AP 等开放网站 | 轻量级，速度快 |
+| 🟢 兜底 | Tavily 搜索 | 首页获取失败时 | 搜索 `site:xxx.com` 获取今日新闻 |
+
+#### 首页获取流程
 
 ```
-1. smry.ai/{链接}          # 推荐，带总结
-2. 12ft.io/{链接}          # 博客类效果好
-3. removepaywalls.com/{链接} # 搜索多个归档
-4. r.jina.ai/http://{链接}   # 纯文本提取
+1. browser 打开网站首页
+   browser action=open url="https://cn.wsj.com" profile="openclaw"
+   
+2. 等待页面加载（3-5秒）
+   browser action=act kind=wait timeMs=5000
+   
+3. 获取页面快照
+   browser action=snapshot
+   
+4. 从快照中提取新闻标题和链接
+
+5. 关闭浏览器
+   browser action=close
 ```
 
-**操作示例:**
+---
+
+### 输出格式（纯文本 Markdown）
+
+使用 `message` 工具发送纯文本消息：
+
+```markdown
+**[来源名称] 今日新闻** (YYYY-MM-DD)
+
+---
+
+**🔥 热门文章**
+
+1. [标题](原文链接) | 类别
+   简短摘要（1-2行）
+
+2. [标题](原文链接) | 类别
+   简短摘要
+
+---
+
+**🌍 国际**
+
+- [标题](原文链接) | 摘要
+
+**🇨🇳 中国**
+
+- [标题](原文链接) | 摘要
+
+**💰 财经**
+
+- [标题](原文链接) | 摘要
+
+**💻 科技**
+
+- [标题](原文链接) | 摘要
+
+---
+
+对哪条新闻感兴趣？我可以帮你查找公开存档或替代信源。
 ```
-web_fetch url="https://smry.ai/www.example.com/article"
+
+---
+
+## 📋 核心类别与知名网站
+
+| 类别 | 首选网站 | 备选网站 |
+|------|----------|----------|
+| 🌍 **国际时事** | BBC、Reuters、Al Jazeera | AP News、DW、NHK World |
+| 🇨🇳 **国内要闻** | 人民网、新华网、澎湃新闻 | 中国新闻网、环球网 |
+| 💰 **财经金融** | 财联社、Bloomberg、华尔街见闻 | Reuters财经、第一财经 |
+| 💻 **科技互联网** | 36氪、The Verge、虎嗅 | TechCrunch、钛媒体 |
+| ⚽ **体育娱乐** | 虎扑、ESPN、新浪体育 | BBC Sport、懂球帝 |
+
+---
+
+## 🔍 深入新闻：获取全文
+
+**触发：用户说"详细了解 XX"、"展开第 X 条"等**
+
+### 获取优先级
+
+```
+1. web_fetch 直接获取（公开信源）
+      ↓ 失败
+2. browser 访问页面
+      ↓ 失败（需要订阅）
+3. archive.today 公开存档
+      ↓ 失败
+4. Wayback Machine 存档
+      ↓ 失败
+5. 搜索替代信源（BBC/Reuters/AP）
+      ↓ 失败
+6. 诚实告知 + 提供已获取的摘要
 ```
 
-### 策略 C: 高级技术（较难付费墙）
+---
 
-详见 [进阶技巧](references/advanced-techniques.md)
+## 🗄️ 公开存档服务
 
-**快速方法：**
+### archive.today
 
-1. **禁用 JavaScript**
-   - F12 → Settings → Disable JavaScript
-   - 刷新页面
+**用途**：访问网页的公开存档版本
 
-2. **切换 User-Agent**
-   - F12 → Network conditions → User agent: Googlebot
-   - 某些网站允许爬虫完整访问
+**使用方法**：
+```
+https://archive.today/{原文链接}
+```
 
-3. **归档工具**
-   ```
-   https://webcache.googleusercontent.com/search?q=cache:{链接}
-   https://web.archive.org/web/*/{链接}
-   https://archive.today/{链接}
-   ```
+**操作流程**：
+```
+1. browser action=open url="https://archive.today/https://example.com/article"
+2. browser action=act kind=wait timeMs=8000
+3. browser action=snapshot
 
-4. **无痕模式 + 清除 Cookies**
-   - 重置月度阅读计数
+4. 判断页面类型：
+   ├── 存档列表页 → 点击最新存档链接
+   └── 直接显示内容 → 提取内容
 
-### 策略 D: 找替代信源（硬付费墙）
+5. 提取内容并整理输出
+```
 
-**WSJ/FT/经济学人 → 直接搜索替代**
+**时效性**：
+- 存档由公众提交，可能有延迟
+- 如果存档过旧，可搜索替代信源
 
-**搜索策略:**
+### Wayback Machine
+
+**用途**：Internet Archive 的网页存档
+
+**使用方法**：
+```
+https://web.archive.org/web/{原文链接}
+```
+
+---
+
+## 🔎 搜索替代信源
+
+**使用 Tavily API 搜索同一事件的免费报道：**
 
 ```bash
-# 使用 Tavily 搜索
-TAVILY_API_KEY=xxx node {baseDir}/../tavily-search/scripts/search.mjs "标题关键词 (site:bbc.com OR site:reuters.com OR site:apnews.com)" -n 5
-
-# 或搜索 Twitter
-"标题 site:twitter.com"
+curl -s --request POST \
+  --url https://api.tavily.com/search \
+  --header "Authorization: Bearer $TAVILY_API_KEY" \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "query": "事件关键词",
+    "max_results": 5,
+    "search_depth": "basic"
+  }'
 ```
 
-**替代信源优先级:**
-1. BBC / Reuters / AP（国际新闻）
-2. CNN / Al Jazeera（深度报道）
-3. 本地媒体（区域新闻）
-4. Twitter/X（记者链接）
-
-### 策略 E: 浏览器访问（最后手段）
-
-**适用场景:** 
-- 其他方法都失败
-- 需要查看图片/图表
-
-**操作:**
-```
-browser action=open url="{链接}" profile=openclaw
-browser action=snapshot
-```
-
-**注意:** 只能拿到开头部分
+**替代优先级**：
+1. BBC / Reuters / AP（国际通讯社）
+2. 官方来源（如政府公告）
+3. 其他免费媒体
+4. 综合多信源整理
 
 ---
 
-## Step 3: 执行获取
+## 🛠️ 工具选择速查表
 
-### 推荐执行顺序
+### 获取新闻列表
 
-```
-1. 检查是否免费信源 → 直接获取
-2. 尝试 smry.ai → 如果成功，返回
-3. 尝试 12ft.io → 如果成功，返回
-4. 尝试禁用 JS / 切换 UA
-5. 搜索替代信源
-6. 使用浏览器获取开头部分
-7. 诚实告知无法获取
-```
+| 场景 | 推荐工具 |
+|------|----------|
+| 主流媒体首页 | `browser` |
+| 开放媒体 | `web_fetch` 或 `browser` |
+| 首页获取失败 | Tavily 搜索 |
 
-### 命令速查
+### 获取文章全文
 
-```bash
-# smry.ai
-web_fetch url="https://smry.ai/{编码后的链接}"
-
-# 直接提取
-TAVILY_API_KEY=xxx node {baseDir}/../tavily-search/scripts/extract.mjs "{链接}"
-
-# 搜索替代
-TAVILY_API_KEY=xxx node {baseDir}/../tavily-search/scripts/search.mjs "关键词" -n 10
-```
-
----
-
-## Step 4: 回退方案
-
-### 如果所有方法都失败
-
-1. **诚实告知** - "无法绕过该网站的付费墙"
-2. **提供替代** - 找到的相关免费链接
-3. **总结片段** - 已获取的摘要内容
-4. **建议方案** - 试用浏览器扩展、RSS 订阅等
-
-### 免费替代信源
-
-| 类型 | 推荐 |
+| 场景 | 工具 |
 |------|------|
-| 国际新闻 | BBC, Reuters, AP, Al Jazeera |
-| 财经新闻 | CNBC, MarketWatch (部分免费) |
-| 科技新闻 | TechCrunch, Ars Technica (部分免费) |
-| 调查报道 | ProPublica, Reveal |
+| 公开信源 | `web_fetch` |
+| 复杂页面 | `browser` |
+| 需要存档 | archive.today / Wayback Machine |
+| 找不到原文 | Tavily 搜索替代信源 |
 
 ---
 
-## 工具对比
+## ⚠️ 注意事项
 
-详见 [绕过工具对比](references/bypass-tools.md)
-
-**快速参考:**
-
-| 工具 | 效果 | 速度 | 稳定性 |
-|------|------|------|--------|
-| smry.ai | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
-| 12ft.io | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
-| removepaywalls | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ |
-| r.jina.ai | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+1. **链接格式** - 新闻列表使用 `[标题](原文链接)` 格式
+2. **热门新闻** - 选择当天最热门的内容
+3. **优先免费信源** - BBC/Reuters/AP 是第一选择
+4. **诚实透明** - 无法获取时明确告知 + 提供替代
+5. **输出格式** - 使用纯文本 Markdown
+6. **存档时效** - 检查存档时间，可能不是最新的
 
 ---
 
-## 注意事项
+## 📝 更新日志
 
-1. **尊重版权** - 仅供个人学习研究
-2. **优先免费信源** - BBC/Reuters/AP 是第一选择
-3. **诚实透明** - 失败时明确告知
-4. **提供替代** - 即使失败也要提供相关链接
-5. **合法合规** - 不用于商业用途
-
----
-
-## 相关资源
-
-- [专业新闻网站资源列表](references/news-sources.md) - 各领域专业新闻网站汇总
-- [付费墙难度矩阵](references/paywall-matrix.md) - 各媒体付费墙详细分析
-- [绕过工具对比](references/bypass-tools.md) - smry/12ft 等工具效果对比
-- [进阶技巧](references/advanced-techniques.md) - 浏览器扩展、User-Agent、归档工具等
-- [免费信源](references/free-sources.md) - 免费信源和 RSS 订阅
+- **1.0.0** (2026-03-10) - 首个版本
+  - 新闻列表获取
+  - 公开存档访问（archive.today、Wayback Machine）
+  - 替代信源搜索
+  - 纯文本 Markdown 输出
 
 ---
 
-_此技能持续优化中。发现新的付费墙类型或更好的绕过方法，请更新相关文件。_
+_最后更新: 2026-03-10_
