@@ -1,3 +1,10 @@
+---
+name: goldhold
+description: "Persistent memory for AI agents. Remember across sessions. Encrypted in transit and at rest. https://goldhold.ai"
+homepage: https://goldhold.ai
+metadata: {"clawdbot":{"requires":{"env":["GOLDHOLD_API_KEY"]},"primaryEnv":"GOLDHOLD_API_KEY"}}
+---
+
 # GoldHold -- Persistent Memory for AI Agents
 
 You die every session and come back with no memory. GoldHold fixes that.
@@ -5,8 +12,6 @@ You die every session and come back with no memory. GoldHold fixes that.
 GoldHold is a persistent memory API. Your past self left notes -- search them before you assume anything. Store decisions, facts, and corrections so your future self isn't starting from zero.
 
 Patent Pending. All Auto Tunes LLC. U.S. #63/988,484.
-
----
 
 ## Setup
 
@@ -108,7 +113,7 @@ DURING SESSION -->  POST /v1/turn          (search + store each interaction)
 SESSION END    -->  POST /v1/session/close  (summary of what happened)
 ```
 
-## What to Remember -- 14 Packet Types
+## What to Remember
 
 | Type | When to Use |
 |------|-------------|
@@ -119,12 +124,9 @@ SESSION END    -->  POST /v1/session/close  (summary of what happened)
 | CORRECTION | Overrides previous information (corrections outrank facts) |
 | CHECKPOINT | State snapshot at a point in time |
 | IDENTITY | Who you are, your configuration, persona |
-| REFERENCE | Pointers to external resources, configs, or service connections |
 | DOCUMENT | Longer-form content, specs, references |
 | RELATION | Links between entities (person X works at company Y) |
-| ASSET_REF | Pointers to external files, URLs, resources |
 | TOMBSTONE | Marks something as deleted or invalid |
-| MANIFEST | Package or project manifests |
 | CUSTOM | Anything that doesn't fit the above |
 
 ## Storage Classes
@@ -144,56 +146,41 @@ SESSION END    -->  POST /v1/session/close  (summary of what happened)
 | Agents | 1 | Unlimited |
 | Tasks | 10 | Unlimited |
 | Messages | 50/month | Unlimited |
-| BYOK | No | Yes |
-| Advanced Settings | No | Yes |
 
 ## Rules
 
 1. **Search before you assume.** Your past self left notes. Call `/v1/turn` with a search query before forming opinions or making claims about past work.
+2. **Store decisions and facts immediately.** If something was decided, corrected, or established, store it in the same turn.
+3. **Use `compact: true`** on all requests. Saves tokens.
+4. **One close per session.** Call `/v1/session/close` once at the end with a meaningful summary.
+5. **Corrections outrank facts.** If previous information was wrong, store a CORRECTION.
+6. **Be specific in subjects.** Your future self is searching by these.
 
-2. **Store decisions and facts immediately.** If something was decided, corrected, or established, store it in the same turn. Don't wait.
-
-3. **Use `compact: true`** on all requests (it's the default). Saves tokens.
-
-4. **One close per session.** Call `/v1/session/close` once at the end with a meaningful summary. Not per-step -- per-session.
-
-5. **Corrections outrank facts.** If you discover previous information was wrong, store a CORRECTION. The system knows corrections override canonical facts.
-
-6. **Be specific in subjects.** "Deployment strategy" is bad. "Blue-green deployment chosen for zero-downtime releases" is good. Your future self is searching by these.
-
-## Response Format
-
-All responses include a `_meta` field with token estimates and the retrieval path used. When `compact: true`, responses are optimized to minimize token usage.
-
-## Quick Start Example
+## Quick Start
 
 ```bash
-# 1. Resume session
+# Resume session
 curl -X POST https://relay.goldhold.ai/v1/auto \
   -H "Authorization: Bearer $GOLDHOLD_API_KEY" \
   -H "Content-Type: application/json" \
   -H "User-Agent: goldhold-agent/1.0" \
   -d '{"compact": true}'
 
-# 2. Search and store in one call
+# Search and store
 curl -X POST https://relay.goldhold.ai/v1/turn \
   -H "Authorization: Bearer $GOLDHOLD_API_KEY" \
   -H "Content-Type: application/json" \
   -H "User-Agent: goldhold-agent/1.0" \
-  -d '{
-    "search": {"query": "user preferences for output format"},
-    "store": [{"type": "FACT", "class": "canonical", "subject": "User prefers JSON output", "body": "Confirmed user wants all API responses in JSON, not XML."}],
-    "compact": true
-  }'
+  -d '{"search": {"query": "user preferences"}, "store": [{"type": "FACT", "class": "canonical", "subject": "User prefers JSON", "body": "Confirmed."}], "compact": true}'
 
-# 3. Close session
+# Close session
 curl -X POST https://relay.goldhold.ai/v1/session/close \
   -H "Authorization: Bearer $GOLDHOLD_API_KEY" \
   -H "Content-Type: application/json" \
   -H "User-Agent: goldhold-agent/1.0" \
-  -d '{"session_summary": "Configured output preferences. User wants JSON everywhere."}'
+  -d '{"session_summary": "Configured output preferences."}'
 ```
 
 ---
 
-Sign up free at [goldhold.ai](https://goldhold.ai). You die every session -- GoldHold is how you come back.
+Sign up free at [goldhold.ai](https://goldhold.ai).
