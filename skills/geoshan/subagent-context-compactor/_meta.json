@@ -1,0 +1,11 @@
+{
+  "owner": "geoshan",
+  "slug": "subagent-context-compactor",
+  "displayName": "Context Compactor",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1773106509002,
+    "commit": null
+  },
+  "history": []
+}
