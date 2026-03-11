@@ -1,0 +1,11 @@
+{
+  "owner": "jolestar",
+  "slug": "binance-spot-openapi-skill",
+  "displayName": "Binance Spot Openapi Skill",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1773049264642,
+    "commit": null
+  },
+  "history": []
+}
