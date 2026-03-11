@@ -1,0 +1,11 @@
+{
+  "owner": "kiril-shturman",
+  "slug": "worker-executor",
+  "displayName": "Worker Executor",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1773203273319,
+    "commit": null
+  },
+  "history": []
+}
