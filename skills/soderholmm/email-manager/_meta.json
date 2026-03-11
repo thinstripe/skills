@@ -1,0 +1,11 @@
+{
+  "owner": "soderholmm",
+  "slug": "email-manager",
+  "displayName": "OpenClaw Email Manager for Postfic and Dovecot",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1773145507722,
+    "commit": null
+  },
+  "history": []
+}
