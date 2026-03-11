@@ -1,0 +1,11 @@
+{
+  "owner": "hu4891",
+  "slug": "prediction-market-reporter",
+  "displayName": "预测市场周报生成器",
+  "latest": {
+    "version": "1.2.0",
+    "publishedAt": 1773194201839,
+    "commit": null
+  },
+  "history": []
+}
