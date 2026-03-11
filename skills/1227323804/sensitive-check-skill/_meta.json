@@ -1,0 +1,11 @@
+{
+  "owner": "1227323804",
+  "slug": "sensitive-check-skill",
+  "displayName": "错敏信息检测（文本）",
+  "latest": {
+    "version": "8.0.3",
+    "publishedAt": 1773195334447,
+    "commit": null
+  },
+  "history": []
+}
