@@ -1,0 +1,11 @@
+{
+  "owner": "geoly-geo",
+  "slug": "geo-content-publisher-2",
+  "displayName": "Geo Content Publisher",
+  "latest": {
+    "version": "0.1.0",
+    "publishedAt": 1773038579888,
+    "commit": null
+  },
+  "history": []
+}
