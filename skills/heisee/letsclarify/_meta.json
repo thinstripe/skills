@@ -3,11 +3,16 @@
   "slug": "letsclarify",
   "displayName": "Let's Clarify",
   "latest": {
-    "version": "1.0.6",
-    "publishedAt": 1771860108689,
-    "commit": "https://github.com/openclaw/skills/commit/4a63b6974b54e8eb641725c7511c457496b58b58"
+    "version": "1.0.7",
+    "publishedAt": 1773344830966,
+    "commit": null
   },
   "history": [
+    {
+      "version": "1.0.6",
+      "publishedAt": 1771860108689,
+      "commit": "https://github.com/openclaw/skills/commit/4a63b6974b54e8eb641725c7511c457496b58b58"
+    },
     {
       "version": "1.0.1",
       "publishedAt": 1771511009355,
