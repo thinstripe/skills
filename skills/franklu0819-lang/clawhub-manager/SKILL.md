@@ -1,6 +1,7 @@
 ---
 name: clawhub-manager
 description: ClawHub 技能管理工具。封装技能的发布、删除、查询和搜索功能，方便管理 ClawHub 上的技能。
+version: 1.2.0
 metadata: {
   "openclaw": {
     "requires": {
