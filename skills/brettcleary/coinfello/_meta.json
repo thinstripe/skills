@@ -3,11 +3,16 @@
   "slug": "coinfello",
   "displayName": "CoinFello",
   "latest": {
-    "version": "0.1.12",
-    "publishedAt": 1773099974579,
-    "commit": "https://github.com/openclaw/skills/commit/a807910656c6990fe34ad12cc77cdb399d3e2f6f"
+    "version": "0.2.1",
+    "publishedAt": 1773271468503,
+    "commit": null
   },
   "history": [
+    {
+      "version": "0.1.12",
+      "publishedAt": 1773099974579,
+      "commit": "https://github.com/openclaw/skills/commit/a807910656c6990fe34ad12cc77cdb399d3e2f6f"
+    },
     {
       "version": "0.1.4",
       "publishedAt": 1772598167579,
