@@ -1,0 +1,11 @@
+{
+  "owner": "alphafactor",
+  "slug": "wechat",
+  "displayName": "Wechat Local Data Reader",
+  "latest": {
+    "version": "1.0.2",
+    "publishedAt": 1773117802377,
+    "commit": null
+  },
+  "history": []
+}
