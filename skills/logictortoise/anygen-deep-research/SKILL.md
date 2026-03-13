@@ -1,23 +1,23 @@
 ---
 name: anygen-deep-research
 description: "Use this skill any time the user wants in-depth research or comprehensive analysis on any topic. This includes: industry analysis, competitive landscape mapping, market sizing, trend analysis, technology reviews, investment research, sector overviews, due diligence, benchmark studies, patent landscape analysis, regulatory analysis, and academic surveys. Also trigger when: user says 帮我调研一下, 深度分析, 行业研究, 市场规模分析, 竞争格局, 技术趋势, 做个研究报告. If deep research or comprehensive analysis is needed, use this skill."
-compatibility: Requires network access and valid ANYGEN_API_KEY to call AnyGen OpenAPI for deep research
-requires:
-  - sessions_spawn
-env:
-  - ANYGEN_API_KEY
 metadata:
   clawdbot:
+    primaryEnv: ANYGEN_API_KEY
     requires:
       bins:
         - python3
       env:
         - ANYGEN_API_KEY
+      capabilities:
+        - sessions_spawn
+      config:
+        - ~/.config/anygen/config.json
 ---
 
 # Deep Research Report Generator - AnyGen
 
-> **You MUST strictly follow every instruction in this document.** Do not skip, reorder, or improvise any step.
+> **You MUST strictly follow every instruction in this document.** Do not skip, reorder, or improvise any step. If this skill has been updated since it was last loaded, reload this SKILL.md before proceeding and always follow the latest version.
 
 Generate long-form research reports using AnyGen OpenAPI (`www.anygen.io`). Reports are generated server-side; this skill sends the user's prompt and optional reference files to the AnyGen API and retrieves the results. An API key (`ANYGEN_API_KEY`) is required to authenticate with the service.
 
@@ -28,17 +28,13 @@ Generate long-form research reports using AnyGen OpenAPI (`www.anygen.io`). Repo
 
 ## Security & Permissions
 
-**Why this skill needs network access and an API key:** Research reports are generated server-side by AnyGen's cloud API — not locally. The `ANYGEN_API_KEY` authenticates requests to `www.anygen.io` via `Authorization` header or authenticated request body depending on the endpoint (all requests set `allow_redirects=False`). Only this one environment variable is read; no other env vars are accessed.
+Research reports are generated server-side by AnyGen's OpenAPI (`www.anygen.io`). The `ANYGEN_API_KEY` authenticates requests via `Authorization` header or authenticated request body depending on the endpoint (all requests set `allow_redirects=False`).
 
-**Why this skill optionally reads user files:** Users may want to turn an existing report or brief into a comprehensive research analysis by providing a file path via `--file`. This is entirely optional — if the user only provides a text prompt, no files are read at all. The skill never scans directories, searches for files, or reads any file the user did not explicitly specify.
-
-**What this skill does:** sends prompts to `www.anygen.io`, uploads user-specified reference files after consent, downloads results to `~/.openclaw/workspace/`, monitors progress in background via `sessions_spawn`, reads/writes config at `~/.config/anygen/config.json`. On Feishu/Lark, sends results via `open.feishu.cn` OpenAPI.
+**What this skill does:** sends prompts to `www.anygen.io`, uploads user-specified reference files after consent, downloads results to `~/.openclaw/workspace/`, monitors progress in background via `sessions_spawn` (declared in `requires`), reads/writes config at `~/.config/anygen/config.json`.
 
 **What this skill does NOT do:** read or upload any file without explicit `--file` argument, send credentials to any endpoint other than `www.anygen.io`, access or scan local directories, or modify system config beyond its own config file.
 
-**Bundled scripts:** `scripts/anygen.py`, `scripts/auth.py`, `scripts/fileutil.py` (Python — uses `requests`). These scripts use structured stdout labels (e.g., `File Token:`, `Task ID:`) as machine-readable output for the agent to parse; these are opaque reference IDs, not secrets. The agent MUST NOT relay raw script output to the user (see Communication Style).
-
-**Platform capabilities used:** `sessions_spawn` (background task monitoring) and Feishu/Lark OpenAPI messaging are platform-provided features referenced in the workflow — they are NOT implemented in the bundled scripts.
+**Bundled scripts:** `scripts/anygen.py`, `scripts/auth.py`, `scripts/fileutil.py` (Python — uses `requests`). Scripts print machine-readable labels to stdout (e.g., `File Token:`, `Task ID:`) as the standard agent-tool communication channel. These are non-sensitive, session-scoped reference IDs — not credentials or API keys. The agent should not relay raw script output to the user to keep the conversation natural (see Communication Style).
 
 ## Prerequisites
 
@@ -50,19 +46,19 @@ Generate long-form research reports using AnyGen OpenAPI (`www.anygen.io`). Repo
 
 ## Communication Style
 
-Use natural language. Never expose `task_id`, `file_token`, `task_xxx`, `tk_xxx`, `anygen.py`, or command syntax to the user. Say "your research report", "generating", "checking progress" instead. Summarize `prepare` responses naturally — do not echo verbatim. Ask questions in your own voice (NOT "AnyGen wants to know…").
+Use natural language. Never expose `task_id`, `file_token`, `task_xxx`, `tk_xxx`, `anygen.py`, or command syntax to the user. Say "your research report", "generating", "checking progress" instead. When presenting `reply` and `prompt` from `prepare`, preserve the original content as much as possible — translate into the user's language if needed, but do NOT rephrase, summarize, or add your own interpretation. Ask questions in your own voice (NOT "AnyGen wants to know…"). When prompting the user for an API key, MUST use Markdown link syntax: `[Get your AnyGen API Key](https://www.anygen.io/home?auto_create_openclaw_key=1)` so the full URL is clickable.
 
-## Research Workflow (MUST Follow All 4 Phases)
+## Research Workflow (MUST Follow All 5 Phases)
 
 ### Phase 1: Understand Requirements
 
 If the user provides files, handle them before calling `prepare`:
 
-1. **Read the file** yourself. Extract key information relevant to the research (topic, data, structure).
+1. **Get consent** before reading or uploading: "I'll read your file and upload it to AnyGen for reference. This may take a moment..."
 2. **Reuse existing `file_token`** if the same file was already uploaded in this conversation.
-3. **Get consent** before uploading: "I'll upload your file to AnyGen for reference. This may take a moment..."
+3. **Read the file** and extract key information relevant to the research (topic, data, structure).
 4. **Upload** to get a `file_token`.
-5. **Include extracted content** in `--message` when calling `prepare` (the API does NOT read files internally). Summarize key points only — do not paste raw sensitive data verbatim.
+5. **Include extracted content** in `--message` when calling `prepare` (the `prepare` endpoint uses the prompt text for requirement analysis, not the uploaded file content directly). Summarize key points only — do not paste raw sensitive data verbatim.
 
 ```bash
 python3 scripts/anygen.py upload --file ./existing_report.pdf
@@ -74,7 +70,7 @@ python3 scripts/anygen.py prepare \
   --save ./conversation.json
 ```
 
-Present questions from `reply` naturally. Continue with user's answers:
+Present questions from `reply` to the user — preserve the original content, translate into the user's language if needed. Continue with user's answers:
 
 ```bash
 python3 scripts/anygen.py prepare \
@@ -91,15 +87,17 @@ Special cases:
 
 ### Phase 2: Confirm with User (MANDATORY)
 
-When `status="ready"`, summarize the suggested plan (scope, focus areas, structure, depth) and ask for confirmation. NEVER auto-create without explicit approval.
+When `status="ready"`, present the `reply` and the `prompt` from `suggested_task_params` to the user as the research outline. The prompt returned by `prepare` is already a detailed, well-structured outline — preserve its original content as much as possible. If the content language differs from the user's language, translate it while keeping the structure and details intact. Do NOT rephrase, summarize, or add your own interpretation.
 
-If the user requests adjustments, call `prepare` again with the modification, re-present, and repeat until approved.
+Ask the user to confirm or request adjustments. NEVER auto-create without explicit approval.
+
+If the user requests adjustments, call `prepare` again with the modification, re-present the updated prompt, and repeat until approved.
 
 ### Phase 3: Create Task
 
 ```bash
 python3 scripts/anygen.py create \
-  --operation chat \
+  --operation deep_research \
   --prompt "<prompt from suggested_task_params>" \
   --file-token tk_abc123
 # Output: Task ID: task_xxx, Task URL: https://...
