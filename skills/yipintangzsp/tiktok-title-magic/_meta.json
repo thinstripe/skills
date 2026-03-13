@@ -3,9 +3,15 @@
   "slug": "tiktok-title-magic",
   "displayName": "Tiktok Title Magic",
   "latest": {
-    "version": "1.0.0",
-    "publishedAt": 1773023092218,
-    "commit": "https://github.com/openclaw/skills/commit/38562ae345e147c34d8079a50067fde9b4159c98"
+    "version": "1.1.0",
+    "publishedAt": 1773111964494,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.0",
+      "publishedAt": 1773023092218,
+      "commit": "https://github.com/openclaw/skills/commit/38562ae345e147c34d8079a50067fde9b4159c98"
+    }
+  ]
 }
