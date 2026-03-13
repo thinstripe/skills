@@ -3,9 +3,15 @@
   "slug": "ad-copywriter",
   "displayName": "Ad Copywriter",
   "latest": {
-    "version": "1.1.1",
-    "publishedAt": 1773140947613,
-    "commit": "https://github.com/openclaw/skills/commit/fdd29966cf44a66ef5ce82b10cce6a4731c61abb"
+    "version": "2.1.0",
+    "publishedAt": 1773421226017,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.1.1",
+      "publishedAt": 1773140947613,
+      "commit": "https://github.com/openclaw/skills/commit/fdd29966cf44a66ef5ce82b10cce6a4731c61abb"
+    }
+  ]
 }
