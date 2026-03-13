@@ -3,11 +3,16 @@
   "slug": "mortgage-calculator",
   "displayName": "Mortgage Calculator",
   "latest": {
-    "version": "1.1.1",
-    "publishedAt": 1773141011936,
-    "commit": "https://github.com/openclaw/skills/commit/d5be54b09420f66a280a63dd32c272d6cf0de061"
+    "version": "2.2.0",
+    "publishedAt": 1773421545824,
+    "commit": null
   },
   "history": [
+    {
+      "version": "1.1.1",
+      "publishedAt": 1773141011936,
+      "commit": "https://github.com/openclaw/skills/commit/d5be54b09420f66a280a63dd32c272d6cf0de061"
+    },
     {
       "version": "1.1.0",
       "publishedAt": 1773121857961,
