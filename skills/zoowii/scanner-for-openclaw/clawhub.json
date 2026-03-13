@@ -1,14 +1,30 @@
 {
   "name": "openclaw-security-scanner",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "slug": "openclaw-security-scanner",
-  "description": "Security expert for OpenClaw deployments. Scans for vulnerabilities in network config, channel policies, and tool permissions. Provides safe remediation with rollback plans. Fully offline - no external network access required.",
-  "homepage": "https://github.com/openclaw/openclaw/tree/main/skills/openclaw-security-scanner",
+  "description": "Security expert for OpenClaw deployments. Audits local configuration files for vulnerabilities in network settings, channel policies, and tool permissions. Pure static analysis — no network probing, no subprocess execution, no system command calls.",
+  "homepage": "https://clawhub.ai/zoowii/scanner-for-openclaw",
   "license": "MIT",
   "author": "DTClaw Team",
   "tags": ["security", "audit", "scanner", "hardening", "compliance"],
   "minOpenClawVersion": "2026.3.0",
   "entryPoint": "SKILL.md",
+  "permissions": {
+    "fileRead": [
+      "~/.openclaw/openclaw.json",
+      "~/.openclaw/config.json",
+      "~/.openclaw/gateway.config.json",
+      "/etc/openclaw/openclaw.json"
+    ],
+    "fileWrite": [
+      "$WORKSPACE/security_report_*.md"
+    ],
+    "envRead": [
+      "OPENCLAW_CONFIG"
+    ],
+    "network": false,
+    "subprocess": false
+  },
   "scripts": {
     "scan": "python3 scripts/security_scan.py",
     "cli": "python3 scripts/cli.py"
@@ -29,6 +45,22 @@
     }
   ],
   "changelog": [
+    {
+      "version": "1.0.4",
+      "date": "2026-03-12",
+      "changes": [
+        "Remove all subprocess calls (lsof, ss, openclaw CLI) to eliminate system command execution",
+        "Remove all network socket connections (port probing) to eliminate network access",
+        "Convert to pure config-file static analysis — no risky capabilities",
+        "Add permissions declaration in clawhub.json (fileRead, fileWrite, envRead, network:false, subprocess:false)",
+        "Add TLS/SSL configuration check and bind-address-missing warning",
+        "CLI wrapper now calls scanner directly instead of via subprocess",
+        "Rewrite remediation-playbook.md: config-edit-only fixes, system commands marked [OPERATOR]",
+        "Rewrite permission-management.md: remove runnable shell commands, add [OPERATOR] labels",
+        "Fix SKILL.md: align example output, troubleshooting paths, and safety warnings with config-only scope",
+        "Resolves ClawHub suspicious classification and declaration/behaviour mismatches"
+      ]
+    },
     {
       "version": "1.0.3",
       "date": "2026-03-10",

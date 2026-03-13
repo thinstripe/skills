@@ -2,6 +2,10 @@
 
 **Purpose**: Implement flexible, scenario-based permission switching for OpenClaw to achieve least-privilege security while maintaining usability.
 
+> **Scope**: This reference documents **configuration patterns** only. It does
+> not instruct the AI agent to run shell commands or access the network.
+> Steps requiring service restarts or CLI interaction are marked **[OPERATOR]**.
+
 ## Problem Statement
 
 Traditional permission models face a dilemma:
@@ -29,10 +33,7 @@ Traditional permission models face a dilemma:
 }
 ```
 
-**Use cases**:
-- Unknown users
-- Group chats
-- Untrusted channels
+**Use cases**: Unknown users, group chats, untrusted channels.
 
 ### Level 2: Standard
 ```json
@@ -46,10 +47,7 @@ Traditional permission models face a dilemma:
 }
 ```
 
-**Use cases**:
-- Known users (owner, admins)
-- 1:1 chats
-- Trusted channels
+**Use cases**: Known users (owner, admins), 1:1 chats, trusted channels.
 
 ### Level 3: Elevated
 ```json
@@ -65,12 +63,7 @@ Traditional permission models face a dilemma:
 }
 ```
 
-**Use cases**:
-- System maintenance
-- Debugging
-- Emergency fixes
-- **Time-limited**
-- **Requires approval**
+**Use cases**: System maintenance, debugging, emergency fixes. **Time-limited, requires approval.**
 
 ### Level 4: Emergency
 ```json
@@ -87,12 +80,7 @@ Traditional permission models face a dilemma:
 }
 ```
 
-**Use cases**:
-- Critical incidents
-- System recovery
-- **Strictly time-limited**
-- **Full audit logging**
-- **Immediate notification**
+**Use cases**: Critical incidents, system recovery. **Strictly time-limited, full audit logging, immediate notification.**
 
 ## Implementation Patterns
 
@@ -157,7 +145,7 @@ Traditional permission models face a dilemma:
     "rules": [
       {
         "name": "business_hours",
-        "condition": { 
+        "condition": {
           "timeRange": "09:00-18:00",
           "timezone": "Asia/Shanghai"
         },
@@ -165,14 +153,14 @@ Traditional permission models face a dilemma:
       },
       {
         "name": "after_hours",
-        "condition": { 
+        "condition": {
           "timeRange": "18:00-09:00"
         },
         "permissionLevel": "restricted"
       },
       {
         "name": "maintenance_window",
-        "condition": { 
+        "condition": {
           "scheduled": true,
           "timeRange": "02:00-04:00"
         },
@@ -191,14 +179,14 @@ Traditional permission models face a dilemma:
     "rules": [
       {
         "name": "trusted_network",
-        "condition": { 
+        "condition": {
           "network": "192.168.3.0/24"
         },
         "permissionLevel": "standard"
       },
       {
         "name": "public_network",
-        "condition": { 
+        "condition": {
           "network": "*"
         },
         "permissionLevel": "restricted"
@@ -253,19 +241,21 @@ Traditional permission models face a dilemma:
 
 ### Time-Limited Permissions
 
-```bash
-# Request elevated access for 30 minutes
-openclaw contexts request --level elevated --duration 30m --reason "Debugging deployment issue"
+**[OPERATOR]** Use the OpenClaw CLI to request elevated access:
 
-# Output:
+```
+openclaw contexts request --level elevated --duration 30m --reason "Debugging deployment issue"
+```
+
+Expected output:
+```
 ✅ Elevated permissions granted
 ⏰ Expires: 2026-03-08 14:30:00
 📋 Reason: Debugging deployment issue
 🔔 Notification sent to admins
-
-# Auto-revert after expiry
-⏰ Elevated permissions expired, reverted to standard
 ```
+
+After the time limit expires, the system automatically reverts to the previous level.
 
 ### Approval Workflow
 
@@ -323,25 +313,9 @@ openclaw contexts request --level elevated --duration 30m --reason "Debugging de
 }
 ```
 
-## Quick Switch Commands
+## Quick Switch Profiles
 
-### Predefined Profiles
-
-```bash
-# Switch to restricted mode (safe for public demos)
-openclaw contexts switch restricted
-
-# Switch to standard mode (daily use)
-openclaw contexts switch standard
-
-# Request elevated mode (requires approval)
-openclaw contexts switch elevated --reason "System maintenance"
-
-# Emergency mode (requires 2 approvers)
-openclaw contexts switch emergency --reason "Critical incident"
-```
-
-### Profile Definitions
+**[OPERATOR]** These profiles are switched via the OpenClaw CLI (`openclaw contexts switch <profile>`), not by this skill.
 
 ```yaml
 profiles:
@@ -353,7 +327,7 @@ profiles:
     channels:
       groups: deny
       unknown-users: deny
-  
+
   standard:
     description: "Normal operation for trusted users"
     tools:
@@ -362,7 +336,7 @@ profiles:
     channels:
       groups: allowlist
       unknown-users: deny
-  
+
   elevated:
     description: "Admin tasks, time-limited"
     tools:
@@ -370,7 +344,7 @@ profiles:
       fs: selective-paths
     time-limit: 30m
     requires: approval
-  
+
   emergency:
     description: "Critical incidents only"
     tools:
@@ -382,7 +356,7 @@ profiles:
 
 ## Best Practices
 
-### DO ✅
+### DO
 - Default to restricted permissions
 - Use time-limited elevated access
 - Require approval for sensitive operations
@@ -390,7 +364,7 @@ profiles:
 - Regularly audit permission usage
 - Implement least-privilege per context
 
-### DON'T ❌
+### DON'T
 - Grant permanent elevated permissions
 - Share elevated access credentials
 - Skip approval workflows
@@ -402,50 +376,28 @@ profiles:
 
 ### If Permissions Lock You Out
 
-```bash
-# 1. Access via console/SSH
-ssh user@openclaw-host
+1. **[OPERATOR]** Access the host via SSH or console
+2. Restore `~/.openclaw/config.json` from the backup copy
+3. **[OPERATOR]** Restart the gateway
 
-# 2. Disable context engine temporarily
-openclaw contexts disable
+Alternatively, to reset only the context engine, remove the `"contexts"` key from `config.json`:
 
-# 3. Or restore from backup
-cp ~/.openclaw/config.json.backup ~/.openclaw/config.json
-openclaw gateway restart
-
-# 4. Or use recovery mode
-openclaw --recovery-mode
-# This starts with minimal config, no contexts
+**Before**:
+```json
+{
+  "contexts": { "enabled": true, "rules": [ ... ] },
+  "gateway": { ... }
+}
 ```
 
-### Emergency Recovery Script
-
-```bash
-#!/bin/bash
-# recovery_permissions.sh
-
-echo "🚨 Emergency Permission Recovery"
-echo "This will reset all contexts to default"
-
-read -p "Are you sure? (y/N) " confirm
-if [ "$confirm" != "y" ]; then
-    echo "Aborted"
-    exit 1
-fi
-
-# Backup current config
-cp ~/.openclaw/config.json ~/.openclaw/config.json.recovery.$(date +%s)
-
-# Remove context configuration
-jq 'del(.contexts)' ~/.openclaw/config.json > /tmp/config.tmp
-mv /tmp/config.tmp ~/.openclaw/config.json
-
-# Restart gateway
-openclaw gateway restart
-
-echo "✅ Permissions reset to default"
-echo "📋 Backup saved: ~/.openclaw/config.json.recovery.*"
+**After**:
+```json
+{
+  "gateway": { ... }
+}
 ```
+
+Then **[OPERATOR]** restart the gateway. This disables context-aware permissions and reverts to defaults.
 
 ## Monitoring & Alerts
 
@@ -487,10 +439,9 @@ echo "📋 Backup saved: ~/.openclaw/config.json.recovery.*"
 ## References
 
 - OpenClaw Security Scanner: `../SKILL.md`
-- Network Security Guide: `network-security.md`
 - Remediation Playbook: `remediation-playbook.md`
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: 2026-03-08
+**Version**: 1.0.4  
+**Last Updated**: 2026-03-12

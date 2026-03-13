@@ -1,9 +1,8 @@
 """Tests for scripts/security_scan.py"""
 
 import json
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -13,8 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from security_scan import (
     DEFAULT_PORTS,
     RISK_LEVELS,
+    WELL_KNOWN_DEFAULT_PORTS,
     Finding,
-    PortDetectionMode,
     SecurityScanner,
 )
 
@@ -82,80 +81,30 @@ class TestGetPortFromConfig:
         assert scanner.get_port_from_config() == DEFAULT_PORTS["gateway"]
 
 
-class TestGetPortFromRunningProcess:
-    def _make_completed_process(self, returncode=0, stdout=""):
-        cp = subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr="")
-        return cp
-
-    @patch("security_scan.subprocess.run")
-    def test_returns_port_on_success(self, mock_run):
-        mock_run.return_value = self._make_completed_process(
-            stdout=json.dumps({"port": 12345})
-        )
+class TestGetBindAddressFromConfig:
+    def test_returns_unknown_when_config_empty(self):
         scanner = SecurityScanner()
-        assert scanner.get_port_from_running_process() == 12345
+        assert scanner.get_bind_address_from_config() == "unknown"
 
-    @patch("security_scan.subprocess.run")
-    def test_converts_string_port_to_int(self, mock_run):
-        mock_run.return_value = self._make_completed_process(
-            stdout=json.dumps({"port": "8080"})
-        )
+    def test_reads_bind_field(self):
         scanner = SecurityScanner()
-        assert scanner.get_port_from_running_process() == 8080
-        assert isinstance(scanner.get_port_from_running_process(), int)
+        scanner.config = {"gateway": {"bind": "127.0.0.1"}}
+        assert scanner.get_bind_address_from_config() == "127.0.0.1"
 
-    @patch("security_scan.subprocess.run")
-    def test_returns_none_on_nonzero_exit(self, mock_run):
-        mock_run.return_value = self._make_completed_process(returncode=1)
+    def test_reads_host_field(self):
         scanner = SecurityScanner()
-        assert scanner.get_port_from_running_process() is None
+        scanner.config = {"gateway": {"host": "0.0.0.0"}}
+        assert scanner.get_bind_address_from_config() == "0.0.0.0"
 
-    @patch("security_scan.subprocess.run", side_effect=FileNotFoundError("no such cmd"))
-    def test_returns_none_when_command_missing(self, mock_run):
+    def test_reads_listenAddress_field(self):
         scanner = SecurityScanner()
-        assert scanner.get_port_from_running_process() is None
+        scanner.config = {"gateway": {"listenAddress": "192.168.1.1"}}
+        assert scanner.get_bind_address_from_config() == "192.168.1.1"
 
-    @patch("security_scan.subprocess.run")
-    def test_returns_none_when_port_key_absent(self, mock_run):
-        mock_run.return_value = self._make_completed_process(
-            stdout=json.dumps({"status": "running"})
-        )
+    def test_bind_takes_precedence_over_host(self):
         scanner = SecurityScanner()
-        assert scanner.get_port_from_running_process() is None
-
-    @patch("security_scan.subprocess.run")
-    def test_returns_none_on_invalid_json(self, mock_run):
-        mock_run.return_value = self._make_completed_process(stdout="not json")
-        scanner = SecurityScanner()
-        assert scanner.get_port_from_running_process() is None
-
-    @patch("security_scan.subprocess.run")
-    def test_returns_none_on_non_numeric_port(self, mock_run):
-        mock_run.return_value = self._make_completed_process(
-            stdout=json.dumps({"port": "abc"})
-        )
-        scanner = SecurityScanner()
-        assert scanner.get_port_from_running_process() is None
-
-
-class TestParseListenLine:
-    def setup_method(self):
-        self.scanner = SecurityScanner()
-
-    def test_localhost(self):
-        assert self.scanner._parse_listen_line("TCP 127.0.0.1:8080 LISTEN") == "127.0.0.1"
-
-    def test_wildcard_star(self):
-        assert self.scanner._parse_listen_line("TCP *:8080 LISTEN") == "0.0.0.0"
-
-    def test_wildcard_0000(self):
-        assert self.scanner._parse_listen_line("TCP 0.0.0.0:8080 LISTEN") == "0.0.0.0"
-
-    def test_ipv6_any(self):
-        assert self.scanner._parse_listen_line("TCP :::8080 LISTEN") == ":: (IPv6 any)"
-
-    def test_unknown_line(self):
-        assert self.scanner._parse_listen_line("TCP 192.168.1.1:8080 LISTEN") is None
+        scanner.config = {"gateway": {"bind": "127.0.0.1", "host": "0.0.0.0"}}
+        assert scanner.get_bind_address_from_config() == "127.0.0.1"
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +160,7 @@ class TestLoadConfig:
 
 
 # ---------------------------------------------------------------------------
-# SecurityScanner — scan_ports
+# SecurityScanner — scan_ports (config-only)
 # ---------------------------------------------------------------------------
 
 class TestScanPorts:
@@ -220,61 +169,55 @@ class TestScanPorts:
         scanner.config = config or {}
         return scanner
 
-    @patch.object(SecurityScanner, "get_port_from_running_process", return_value=None)
-    @patch.object(SecurityScanner, "check_port", return_value=False)
-    def test_default_port_finding_uses_actual_port(self, mock_cp, mock_rp):
-        """When running on default port, Finding should reference actual_port."""
+    def test_default_port_finding(self):
         scanner = self._make_scanner({"gateway": {"port": 18789}})
         findings = scanner.scan_ports()
         port_findings = [f for f in findings if "default port" in f.title.lower()]
         assert len(port_findings) == 1
         assert "18789" in port_findings[0].title
-        assert "18789" in port_findings[0].description
 
-    @patch.object(SecurityScanner, "get_port_from_running_process", return_value=8080)
-    @patch.object(SecurityScanner, "check_port", return_value=False)
-    def test_running_port_overrides_config_in_multi_source(self, mock_cp, mock_rp):
-        """MULTI_SOURCE mode: running_port takes precedence over config_port."""
-        scanner = self._make_scanner({"gateway": {"port": 9999}})
-        with patch("security_scan.PORT_DETECTION_MODE", PortDetectionMode.MULTI_SOURCE):
-            findings = scanner.scan_ports()
-        port_findings = [f for f in findings if "default port" in f.title.lower()]
-        assert len(port_findings) == 1
-        assert "8080" in port_findings[0].title
-
-    @patch.object(SecurityScanner, "get_port_from_running_process", return_value=None)
-    @patch.object(SecurityScanner, "check_port", return_value=False)
-    def test_no_finding_for_non_default_port(self, mock_cp, mock_rp):
+    def test_no_finding_for_non_default_port(self):
         scanner = self._make_scanner({"gateway": {"port": 31337}})
         findings = scanner.scan_ports()
         port_findings = [f for f in findings if "default port" in f.title.lower()]
         assert len(port_findings) == 0
 
-    @patch.object(SecurityScanner, "get_port_from_running_process", return_value=None)
-    @patch.object(SecurityScanner, "get_port_binding", return_value="0.0.0.0")
-    @patch.object(SecurityScanner, "check_port", return_value=True)
-    def test_gateway_exposed_to_all_interfaces(self, mock_cp, mock_bind, mock_rp):
-        scanner = self._make_scanner()
+    def test_bind_0000_is_critical(self):
+        scanner = self._make_scanner({"gateway": {"bind": "0.0.0.0", "port": 9999}})
         findings = scanner.scan_ports()
-        critical = [f for f in findings if f.level == "CRITICAL" and "gateway" in f.title.lower()]
-        assert len(critical) >= 1
+        critical = [f for f in findings if f.level == "CRITICAL" and "bind" in f.title.lower()]
+        assert len(critical) == 1
 
-    @patch.object(SecurityScanner, "get_port_from_running_process", return_value=None)
-    @patch.object(SecurityScanner, "get_port_binding", return_value="127.0.0.1")
-    @patch.object(SecurityScanner, "check_port", return_value=True)
-    def test_localhost_binding_no_critical(self, mock_cp, mock_bind, mock_rp):
-        scanner = self._make_scanner()
+    def test_bind_localhost_no_critical(self):
+        scanner = self._make_scanner({"gateway": {"bind": "127.0.0.1", "port": 9999}})
         findings = scanner.scan_ports()
-        critical_network = [f for f in findings if f.level == "CRITICAL" and f.category == "NETWORK"]
-        assert len(critical_network) == 0
+        critical = [f for f in findings if f.level == "CRITICAL" and f.category == "NETWORK"]
+        assert len(critical) == 0
 
-    @patch.object(SecurityScanner, "check_port", return_value=False)
-    def test_config_only_mode_skips_process_check(self, mock_cp):
+    def test_missing_bind_address_warning(self):
         scanner = self._make_scanner({"gateway": {"port": 31337}})
-        with patch("security_scan.PORT_DETECTION_MODE", PortDetectionMode.CONFIG_ONLY):
-            with patch.object(scanner, "get_port_from_running_process") as mock_rp:
-                scanner.scan_ports()
-                mock_rp.assert_not_called()
+        findings = scanner.scan_ports()
+        bind_findings = [f for f in findings if "not explicitly configured" in f.title.lower()]
+        assert len(bind_findings) == 1
+        assert bind_findings[0].level == "MEDIUM"
+
+    def test_tls_not_enabled_is_high(self):
+        scanner = self._make_scanner({"gateway": {"port": 31337, "bind": "127.0.0.1"}})
+        findings = scanner.scan_ports()
+        tls_findings = [f for f in findings if "TLS" in f.title]
+        assert len(tls_findings) == 1
+        assert tls_findings[0].level == "HIGH"
+
+    def test_tls_enabled_no_finding(self):
+        scanner = self._make_scanner({"gateway": {"port": 31337, "bind": "127.0.0.1", "tls": {"enabled": True}}})
+        findings = scanner.scan_ports()
+        tls_findings = [f for f in findings if "TLS" in f.title]
+        assert len(tls_findings) == 0
+
+    def test_empty_config_still_produces_findings(self):
+        scanner = self._make_scanner({})
+        findings = scanner.scan_ports()
+        assert len(findings) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -470,11 +413,18 @@ class TestRunFullScan:
 
 
 # ---------------------------------------------------------------------------
-# PortDetectionMode enum
+# No risky imports — verify subprocess/socket not imported
 # ---------------------------------------------------------------------------
 
-class TestPortDetectionMode:
-    def test_enum_values(self):
-        assert PortDetectionMode.CONFIG_ONLY.value == "config_only"
-        assert PortDetectionMode.PROCESS_CHECK.value == "process_check"
-        assert PortDetectionMode.MULTI_SOURCE.value == "multi_source"
+class TestNoRiskyImports:
+    def test_no_subprocess_import(self):
+        import security_scan
+        assert not hasattr(security_scan, "subprocess"), "subprocess must not be imported"
+
+    def test_no_socket_import(self):
+        import security_scan
+        assert not hasattr(security_scan, "socket"), "socket must not be imported"
+
+    def test_no_shutil_import(self):
+        import security_scan
+        assert not hasattr(security_scan, "shutil"), "shutil must not be imported"
