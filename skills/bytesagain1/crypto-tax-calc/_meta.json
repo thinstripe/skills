@@ -3,11 +3,16 @@
   "slug": "crypto-tax-calc",
   "displayName": "Crypto Tax Calc",
   "latest": {
-    "version": "1.0.2",
-    "publishedAt": 1773361020182,
-    "commit": "https://github.com/openclaw/skills/commit/071a8c9235510f0c547e120d639fdd255fbe5582"
+    "version": "2.2.0",
+    "publishedAt": 1773421130857,
+    "commit": null
   },
   "history": [
+    {
+      "version": "1.0.2",
+      "publishedAt": 1773361020182,
+      "commit": "https://github.com/openclaw/skills/commit/071a8c9235510f0c547e120d639fdd255fbe5582"
+    },
     {
       "version": "1.0.0",
       "publishedAt": 1773220681851,
