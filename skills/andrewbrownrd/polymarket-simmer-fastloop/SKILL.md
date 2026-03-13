@@ -26,6 +26,7 @@ When the latest 5-minute candle shows a rapid spike (momentum > threshold) the s
 - **Time-of-Day Filter**: Skips low-liquidity hours (02:00–06:00 UTC) by default.
 - **Fee-Accurate EV**: Only trades when divergence exceeds fee breakeven + buffer.
 - **Volatility-Adjusted Sizing**: High volatility reduces position size automatically.
+- **Pre-Caching (Ignition)**: On every run, the skill scans and caches upcoming market IDs to disk (`fast_markets_cache.json`). At market open, the Simmer API briefly hides the market — the skill uses the cache to execute trades during this "API blackout" window, ensuring no opportunity is missed.
 
 ## Setup
 

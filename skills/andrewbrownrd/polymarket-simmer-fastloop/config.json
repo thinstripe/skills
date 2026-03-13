@@ -2,11 +2,11 @@
   "require_orderbook": false,
   "window": "5m",
   "min_momentum_pct": 1.0,
-  "daily_budget": 1000.0,
+  "daily_budget": 10.0,
   "max_position": 5.0,
   "time_filter": true,
   "asset": "BTC",
-  "target_time_max": 30000000,
+  "target_time_max": 210,
   "volume_confidence": true,
-  "target_time_min": 0
+  "target_time_min": 90
 }

@@ -194,10 +194,6 @@ def _log_trade_to_ledger(trade_id, market_id, side, entry_price, amount, reason,
 # API Helpers
 # =============================================================================
 
-# =============================================================================
-# API Helpers
-# =============================================================================
-
 _client = None
 
 def get_client(live=True):
@@ -326,16 +322,78 @@ def fetch_binance_orderbook(asset="BTC", limit=20):
         return None
 
 # =============================================================================
-# Market Discovery
+# Market Discovery (V8.10 Pre-Caching Engine)
 # =============================================================================
 
+CACHE_FILE = os.path.join(os.path.dirname(__file__), 'fast_markets_cache.json')
+
+def _parse_cache_dt(dt_str):
+    """Parse ISO datetime string, returning UTC-aware datetime or None."""
+    if not dt_str:
+        return None
+    try:
+        return datetime.fromisoformat(str(dt_str).replace('Z', '+00:00'))
+    except Exception:
+        return None
+
+def _update_market_cache(new_markets):
+    """[V8.10] Save future markets to local JSON cache to survive API blackout at market open."""
+    now = datetime.now(timezone.utc)
+    cache = []
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r') as f:
+                saved = json.load(f)
+                cache = [m for m in saved if _parse_cache_dt(m.get('end_time')) and _parse_cache_dt(m.get('end_time')) > now]
+        except Exception:
+            pass
+
+    cache_dict = {m.get('id') or m.get('market_id'): m for m in cache if m.get('id') or m.get('market_id')}
+    for m in new_markets:
+        key = m.get('market_id') or m.get('id')
+        end_time = m.get('end_time')
+        if key and end_time and end_time > now:
+            m_copy = m.copy()
+            m_copy['end_time'] = end_time.isoformat() if hasattr(end_time, 'isoformat') else str(end_time)
+            m_copy['market_id'] = key
+            cache_dict[key] = m_copy
+
+    try:
+        with open(CACHE_FILE, 'w') as f:
+            json.dump(list(cache_dict.values()), f)
+        if new_markets:
+            print(f"  [Ignition] Successfully cached {len(new_markets)} future market IDs.")
+    except Exception:
+        pass
+
+def _get_cached_markets():
+    """[V8.10] Load alive cached markets. Used to rescue hidden markets after API goes dark."""
+    now = datetime.now(timezone.utc)
+    if not os.path.exists(CACHE_FILE):
+        return []
+    try:
+        with open(CACHE_FILE, 'r') as f:
+            saved = json.load(f)
+        parsed = []
+        for m in saved:
+            dt = _parse_cache_dt(m.get('end_time'))
+            if dt and dt > now:
+                m['end_time'] = dt
+                m['id'] = m.get('market_id') or m.get('id')
+                m['source'] = 'cache'
+                m.setdefault('is_live_now', None)
+                parsed.append(m)
+        return parsed
+    except Exception:
+        return []
+
 def discover_fast_markets(asset="BTC", window="5m"):
-    """Find active fast markets via Simmer SDK. Falls back to Gamma API."""
+    """Find active fast markets. Uses Simmer SDK first, then Pre-Cache, then Gamma fallback."""
+    simmer_markets = []
     try:
         client = get_client()
         sdk_markets = client.get_fast_markets(asset=asset, window=window, limit=50)
         if sdk_markets:
-            markets = []
             for m in sdk_markets:
                 end_time = None
                 if m.resolves_at:
@@ -344,11 +402,11 @@ def discover_fast_markets(asset="BTC", window="5m"):
                         end_time = datetime.fromisoformat(iso_str)
                     except ValueError:
                         pass
-                
+
                 clob_tokens = [m.polymarket_token_id] if m.polymarket_token_id else []
                 if m.polymarket_no_token_id:
                     clob_tokens.append(m.polymarket_no_token_id)
-                markets.append({
+                simmer_markets.append({
                     "id": m.id,
                     "question": m.question,
                     "slug": "",
@@ -362,12 +420,29 @@ def discover_fast_markets(asset="BTC", window="5m"):
                     "external_price_yes": m.external_price_yes,
                     "fee_rate_bps": 0,
                     "source": "simmer",
+                    "market_id": m.id,
                 })
-            return markets
     except Exception as e:
-        print(f"  [WARNING] Simmer fast-markets API failed ({e}), falling back to Gamma")
+        print(f"  [WARNING] Simmer fast-markets API failed ({e}), falling back to cache/Gamma")
 
-    return _discover_via_gamma(asset, window)
+    # [V8.10] Always update the cache with whatever Simmer found, then load cached ones
+    _update_market_cache(simmer_markets)
+    cached_markets = _get_cached_markets()
+
+    # Fallback to Gamma if both Simmer and cache are empty
+    gamma_markets = []
+    if not simmer_markets and not cached_markets:
+        gamma_markets = _discover_via_gamma(asset, window)
+
+    # Merge, deduplicate by question title
+    seen, merged = set(), []
+    for m in simmer_markets + cached_markets + gamma_markets:
+        q = m.get('question', '')
+        if q and q not in seen:
+            seen.add(q)
+            merged.append(m)
+
+    return merged
 
 def _discover_via_gamma(asset="BTC", window="5m"):
     """Fallback: Find active fast markets on Polymarket via Gamma API."""
