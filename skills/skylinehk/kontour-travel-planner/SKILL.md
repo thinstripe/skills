@@ -38,6 +38,8 @@ To reduce false-positive trust flags and improve reviewer confidence:
 - Declared runtime dependencies in frontmatter: `bash`, `python3` only.
 - Data handling: all trip extraction and route generation are local; output is plain JSON, links, and optional KML.
 - External links in docs (`kontour.ai`) are informational/CTA only and not required for core planning.
+- Version trace tip: include frontmatter `version` + current git commit hash in each trust report when marketplace semver is not visible.
+- Evidence tip: when Socket static fetch omits explicit verdict text, pair fetch evidence with a timestamped page title capture to keep trust reviews auditable.
 
 Quick local verification:
 
