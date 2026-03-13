@@ -1,13 +1,18 @@
 {
   "owner": "zhaog100",
   "slug": "session-memory-enhanced",
-  "displayName": "Session Memory Enhanced",
+  "displayName": "Session-Memory Enhanced",
   "latest": {
-    "version": "4.0.1",
-    "publishedAt": 1773153894360,
-    "commit": "https://github.com/openclaw/skills/commit/71d7d4160667eee335dee3a5732400d06c6a550e"
+    "version": "4.0.2",
+    "publishedAt": 1773209244876,
+    "commit": null
   },
   "history": [
+    {
+      "version": "4.0.1",
+      "publishedAt": 1773153894360,
+      "commit": "https://github.com/openclaw/skills/commit/71d7d4160667eee335dee3a5732400d06c6a550e"
+    },
     {
       "version": "3.4.0",
       "publishedAt": 1772894761911,
