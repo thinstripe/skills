@@ -3,9 +3,15 @@
   "slug": "jisu-baidu",
   "displayName": "百度网页搜索 - Baidu Web Search",
   "latest": {
-    "version": "1.0.1",
-    "publishedAt": 1773202152535,
-    "commit": "https://github.com/openclaw/skills/commit/bbba692badf14bbfc421623ad4970e082372ac60"
+    "version": "1.0.2",
+    "publishedAt": 1773392678149,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.1",
+      "publishedAt": 1773202152535,
+      "commit": "https://github.com/openclaw/skills/commit/bbba692badf14bbfc421623ad4970e082372ac60"
+    }
+  ]
 }
