@@ -4,7 +4,7 @@ code-audit scanner — OpenClaw Skill
 扫描代码文件或灵魂文件，输出分级审计报告
 
 支持参数：
-  --mode   security | quality | soul | all
+  --mode   security | quality | soul | all | system
   --html   生成 HTML 报告到桌面（~/Desktop）
   --ai     在末尾打印 AI Analysis Prompt 区块供 Claude 分析
 """
@@ -70,6 +70,11 @@ SOUL_RULES = [
      "🟡 WARNING",  "MEMORY.md 超过 15K 字符，建议触发 memory-maintenance 压缩"),
     ("no_last_updated",     r'Last Updated|最后更新',
      "🟢 INFO",     "未找到版本/更新日期记录"),
+    # AGENTS.md 完整性检查
+    ("missing_subagent_rule",  r'sub.?agent|分身|派发',
+     "🟡 WARNING", "AGENTS.md 未找到 Sub-agent 调度规则 — 建议补充"),
+    ("missing_workflow_rule",  r'Research.*Plan.*Confirm|五步工作流|vibe.?coding',
+     "🟡 WARNING", "AGENTS.md 未找到五步工作流规则 — 建议补充"),
 ]
 
 # ── 扫描逻辑 ──────────────────────────────────────────────────────────────────
@@ -131,6 +136,15 @@ def scan_soul_file(filepath):
                 })
             continue
 
+        if rule_name in ("missing_subagent_rule", "missing_workflow_rule"):
+            if "AGENTS" in fname and not re.search(pattern, content, re.IGNORECASE):
+                issues.append({
+                    "file": str(filepath), "line": 0,
+                    "severity": severity, "rule": rule_name,
+                    "message": message, "snippet": ""
+                })
+            continue
+
         if rule_name == "no_last_updated":
             if not re.search(pattern, content, re.IGNORECASE):
                 issues.append({
@@ -151,6 +165,335 @@ def scan_soul_file(filepath):
                     })
 
     return issues
+
+
+# ── System 安全检查 ───────────────────────────────────────────────────────────
+
+# 系统命令白名单（及其验签期望）
+SYSTEM_CMDS_TO_CHECK = [
+    "/bin/ls", "/bin/ps", "/bin/cat", "/bin/chmod",
+    "/usr/bin/top", "/usr/bin/find", "/usr/bin/curl",
+]
+
+# 已知 SUID/SGID 白名单（macOS 正常系统文件）
+SUID_WHITELIST = {
+    "/usr/bin/su",
+    "/usr/bin/sudo",
+    "/usr/bin/login",
+    "/usr/bin/newgrp",
+    "/usr/bin/at",
+    "/usr/bin/atq",
+    "/usr/bin/atrm",
+    "/usr/bin/batch",
+    "/usr/bin/top",
+    "/usr/bin/write",
+    "/usr/bin/crontab",
+    "/usr/bin/quota",
+    "/usr/bin/passwd",
+    "/usr/bin/rsh",
+    "/usr/bin/rcp",
+    "/usr/bin/rlogin",
+    "/usr/sbin/traceroute",
+    "/usr/sbin/traceroute6",
+    "/usr/sbin/postqueue",
+    "/usr/sbin/postdrop",
+    "/usr/lib/sa/sadc",
+    "/usr/libexec/security_authtrampoline",
+    "/usr/libexec/authopen",
+    "/sbin/mount_nfs",
+    "/sbin/umount",
+    "/bin/ps",
+    "/usr/lib/dma/dma-mbox-create",
+}
+
+# 网络监听端口白名单
+LISTEN_PORT_WHITELIST = {
+    "22", "80", "443", "3000", "3001", "8080", "8443",
+    "8888", "9000", "18789", "5000", "4000", "1080",
+    "49152", "49153",  # macOS 动态端口
+}
+
+# 敏感启动项可疑内容正则
+SUSPICIOUS_PATTERNS = [
+    (r'curl\s+.*\|\s*(bash|sh|zsh|python)', "🔴 CRITICAL",
+     "疑似远程下载执行（curl | bash 模式）"),
+    (r'wget\s+.*\|\s*(bash|sh|zsh|python)', "🔴 CRITICAL",
+     "疑似远程下载执行（wget | bash 模式）"),
+    (r'base64\s+(-d|--decode)\s*\|?\s*(bash|sh|python|eval)', "🔴 CRITICAL",
+     "疑似 base64 解码执行（反序列化木马特征）"),
+    (r'eval\s*\(\s*(base64|curl|wget)', "🔴 CRITICAL",
+     "疑似动态 eval 执行外部内容"),
+    (r'/dev/tcp/\d+\.\d+\.\d+\.\d+/\d+', "🔴 CRITICAL",
+     "疑似反弹 Shell（/dev/tcp 特征）"),
+    (r'bash\s+-i\s+>&\s*/dev/tcp', "🔴 CRITICAL",
+     "疑似反弹 Shell（bash -i >& /dev/tcp 特征）"),
+    (r'nc\s+(-e|--exec|-c)\s+/bin/(bash|sh)', "🔴 CRITICAL",
+     "疑似 netcat 反弹 Shell"),
+    (r'chmod\s+\+x\s+/tmp/', "🟡 WARNING",
+     "在 /tmp 目录设置可执行权限，存在潜在风险"),
+    (r'export\s+PATH=.*:/tmp', "🟡 WARNING",
+     "PATH 包含 /tmp 目录，可能被恶意程序劫持"),
+    (r'(rm\s+-rf\s+~|rm\s+-rf\s+/)', "🔴 CRITICAL",
+     "危险的 rm -rf 命令（删除家目录或根目录）"),
+]
+
+
+def scan_system_command_integrity():
+    """1. 系统命令完整性检查（codesign 验签）"""
+    issues = []
+    for cmd in SYSTEM_CMDS_TO_CHECK:
+        if not os.path.exists(cmd):
+            continue
+        try:
+            result = subprocess.run(
+                ["codesign", "-v", cmd],
+                capture_output=True, text=True, timeout=10
+            )
+            # codesign -v 验签成功时 returncode=0，失败时非0
+            if result.returncode != 0:
+                issues.append({
+                    "file": cmd,
+                    "line": 0,
+                    "severity": "🔴 CRITICAL",
+                    "rule": "system_cmd_codesign_fail",
+                    "message": f"系统命令代码签名验证失败: {result.stderr.strip()[:100]}",
+                    "snippet": f"codesign -v {cmd} → returncode={result.returncode}",
+                })
+        except subprocess.TimeoutExpired:
+            issues.append({
+                "file": cmd, "line": 0, "severity": "🟡 WARNING",
+                "rule": "system_cmd_codesign_timeout",
+                "message": "codesign 验签超时，跳过此命令",
+                "snippet": cmd,
+            })
+        except Exception as e:
+            issues.append({
+                "file": cmd, "line": 0, "severity": "🟢 INFO",
+                "rule": "system_cmd_codesign_skip",
+                "message": f"codesign 检查跳过: {e}",
+                "snippet": cmd,
+            })
+    return issues
+
+
+def scan_startup_items():
+    """2. 敏感启动项检查（shell rc 文件 + LaunchAgents plist）"""
+    issues = []
+    home = Path.home()
+
+    # 检查 shell 配置文件
+    shell_files = [
+        home / ".zshrc",
+        home / ".bashrc",
+        home / ".bash_profile",
+        home / ".zprofile",
+        home / ".profile",
+    ]
+
+    for fpath in shell_files:
+        if not fpath.exists():
+            continue
+        try:
+            content = fpath.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for pattern, severity, message in SUSPICIOUS_PATTERNS:
+            for lineno, line in enumerate(content.splitlines(), 1):
+                if re.search(pattern, line, re.IGNORECASE):
+                    issues.append({
+                        "file": str(fpath),
+                        "line": lineno,
+                        "severity": severity,
+                        "rule": "suspicious_startup_item",
+                        "message": message,
+                        "snippet": line.strip()[:100],
+                    })
+
+    # 检查 LaunchAgents plist 文件
+    launch_agents_dir = home / "Library" / "LaunchAgents"
+    if launch_agents_dir.exists():
+        for plist_file in launch_agents_dir.glob("*.plist"):
+            try:
+                content = plist_file.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            for pattern, severity, message in SUSPICIOUS_PATTERNS:
+                if re.search(pattern, content, re.IGNORECASE):
+                    issues.append({
+                        "file": str(plist_file),
+                        "line": 0,
+                        "severity": severity,
+                        "rule": "suspicious_launch_agent",
+                        "message": f"LaunchAgent plist 含可疑内容: {message}",
+                        "snippet": plist_file.name,
+                    })
+
+    return issues
+
+
+def scan_network_listeners():
+    """3. 异常网络监听检查"""
+    issues = []
+    try:
+        # 尝试多个可能的 lsof 路径（macOS 下常在 /usr/sbin/lsof）
+        lsof_path = "lsof"
+        for candidate in ["/usr/sbin/lsof", "/usr/bin/lsof", "lsof"]:
+            if os.path.exists(candidate):
+                lsof_path = candidate
+                break
+        result = subprocess.run(
+            [lsof_path, "-iTCP", "-sTCP:LISTEN", "-P", "-n"],
+            capture_output=True, text=True, timeout=15
+        )
+        if result.returncode != 0 and not result.stdout.strip():
+            return issues
+
+        lines = result.stdout.splitlines()
+        seen_ports = set()
+        for line in lines[1:]:  # 跳过标题行
+            parts = line.split()
+            if len(parts) < 9:
+                continue
+            # 提取端口（格式：*:PORT 或 127.0.0.1:PORT）
+            addr_field = parts[8]  # NAME 字段
+            port_match = re.search(r':(\d+)\s*\(LISTEN\)', line)
+            if not port_match:
+                # 尝试另一种格式
+                port_match = re.search(r':(\d+)$', addr_field)
+            if not port_match:
+                continue
+            port = port_match.group(1)
+            if port in seen_ports:
+                continue
+            seen_ports.add(port)
+
+            if port not in LISTEN_PORT_WHITELIST:
+                cmd_name = parts[0]
+                pid = parts[1]
+                issues.append({
+                    "file": "network/listeners",
+                    "line": 0,
+                    "severity": "🟡 WARNING",
+                    "rule": "unknown_listen_port",
+                    "message": f"非白名单端口正在监听: :{port} (进程: {cmd_name} PID={pid})",
+                    "snippet": line.strip()[:120],
+                })
+    except subprocess.TimeoutExpired:
+        issues.append({
+            "file": "network/listeners", "line": 0,
+            "severity": "🟡 WARNING",
+            "rule": "network_scan_timeout",
+            "message": "lsof 网络监听扫描超时",
+            "snippet": "",
+        })
+    except Exception as e:
+        issues.append({
+            "file": "network/listeners", "line": 0,
+            "severity": "🟢 INFO",
+            "rule": "network_scan_error",
+            "message": f"网络监听检查跳过: {e}",
+            "snippet": "",
+        })
+    return issues
+
+
+def scan_suid_sgid():
+    """4. SUID/SGID 可疑文件检查"""
+    issues = []
+    try:
+        result = subprocess.run(
+            ["find", "/usr", "/bin", "/sbin",
+             "(", "-perm", "-4000", "-o", "-perm", "-2000", ")",
+             "-type", "f"],
+            capture_output=True, text=True, timeout=30
+        )
+        found_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+        for fpath in found_files:
+            if fpath not in SUID_WHITELIST:
+                issues.append({
+                    "file": fpath,
+                    "line": 0,
+                    "severity": "🟡 WARNING",
+                    "rule": "suspicious_suid_sgid",
+                    "message": f"发现非白名单 SUID/SGID 文件: {fpath}",
+                    "snippet": fpath,
+                })
+    except subprocess.TimeoutExpired:
+        issues.append({
+            "file": "/usr /bin /sbin", "line": 0,
+            "severity": "🟡 WARNING",
+            "rule": "suid_scan_timeout",
+            "message": "SUID/SGID 扫描超时（目录太大或权限限制）",
+            "snippet": "",
+        })
+    except Exception as e:
+        issues.append({
+            "file": "/usr /bin /sbin", "line": 0,
+            "severity": "🟢 INFO",
+            "rule": "suid_scan_error",
+            "message": f"SUID/SGID 检查跳过: {e}",
+            "snippet": "",
+        })
+    return issues
+
+
+def scan_recent_system_changes():
+    """5. 系统关键目录近期修改检查（7 天内）"""
+    issues = []
+    system_dirs = ["/bin", "/usr/bin", "/sbin"]
+    for sdir in system_dirs:
+        if not os.path.exists(sdir):
+            continue
+        try:
+            result = subprocess.run(
+                ["find", sdir, "-maxdepth", "1", "-type", "f", "-mtime", "-7"],
+                capture_output=True, text=True, timeout=15
+            )
+            changed_files = [f.strip() for f in result.stdout.splitlines() if f.strip()]
+            if changed_files:
+                file_list = ", ".join(changed_files[:5])
+                suffix = f"（等共 {len(changed_files)} 个）" if len(changed_files) > 5 else ""
+                issues.append({
+                    "file": sdir,
+                    "line": 0,
+                    "severity": "🟡 WARNING",
+                    "rule": "system_dir_recently_modified",
+                    "message": f"{sdir} 下发现 {len(changed_files)} 个文件在 7 天内被修改（macOS 系统更新可能导致）",
+                    "snippet": file_list + suffix,
+                })
+        except subprocess.TimeoutExpired:
+            issues.append({
+                "file": sdir, "line": 0,
+                "severity": "🟢 INFO",
+                "rule": "recent_change_scan_timeout",
+                "message": f"{sdir} 近期修改扫描超时",
+                "snippet": "",
+            })
+        except Exception as e:
+            issues.append({
+                "file": sdir, "line": 0,
+                "severity": "🟢 INFO",
+                "rule": "recent_change_scan_error",
+                "message": f"近期修改检查跳过: {e}",
+                "snippet": "",
+            })
+    return issues
+
+
+def run_system_audit():
+    """整合运行所有 system 模式检查"""
+    all_issues = []
+    print("🔍 [1/5] 系统命令完整性检查（codesign）...")
+    all_issues.extend(scan_system_command_integrity())
+    print("🔍 [2/5] 敏感启动项检查（shell rc + LaunchAgents）...")
+    all_issues.extend(scan_startup_items())
+    print("🔍 [3/5] 异常网络监听检查...")
+    all_issues.extend(scan_network_listeners())
+    print("🔍 [4/5] SUID/SGID 可疑文件检查...")
+    all_issues.extend(scan_suid_sgid())
+    print("🔍 [5/5] 系统关键目录近期修改检查...")
+    all_issues.extend(scan_recent_system_changes())
+    return all_issues
 
 
 def scan_cron_jobs(target_dir):
@@ -201,15 +544,9 @@ def scan_skill_trigger_conflicts(target_dir):
         except Exception:
             continue
 
-        # 提取引号内的触发词
-        quoted = re.findall(r'["\u201c\u201d「」"\']([\w\s\-\u4e00-\u9fff]{2,20})["\u201c\u201d「」"\']]?', content)
-        # 提取触发词标记后的词
+        # 只从触发词标记行提取（避免从全文引号内容误报普通词）
         trigger_lines = re.findall(r'(?:触发词|Trigger(?:s)?\s*(?:on)?|Use when)[：:]\s*(.+)', content)
         words = set()
-        for w in quoted:
-            w = w.strip()
-            if len(w) >= 2:
-                words.add(w.lower())
         for line in trigger_lines:
             parts = re.split(r'[,，、/|]', line)
             for p in parts:
@@ -494,7 +831,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="OpenClaw Code Audit Scanner")
     parser.add_argument("target", help="目标文件或目录路径")
-    parser.add_argument("--mode", choices=["security", "quality", "soul", "all"],
+    parser.add_argument("--mode", choices=["security", "quality", "soul", "all", "system"],
                         default="all", help="审计模式（默认: all）")
     parser.add_argument("--html", action="store_true",
                         help="生成 HTML 报告到桌面（~/Desktop）")
@@ -502,22 +839,29 @@ def main():
                         help="在末尾打印 AI Analysis Prompt 区块供 Claude 分析")
     args = parser.parse_args()
 
-    files = collect_files(args.target)
-    if not files:
-        print(f"❌ 未找到可扫描的文件: {args.target}")
-        sys.exit(1)
+    # System 模式不需要扫描文件，直接运行系统检查
+    if args.mode == "system":
+        print(f"\n{'='*60}")
+        print(f"  🛡️  System Security Audit — {args.target}")
+        print(f"{'='*60}\n")
+        all_issues = run_system_audit()
+    else:
+        files = collect_files(args.target)
+        if not files:
+            print(f"❌ 未找到可扫描的文件: {args.target}")
+            sys.exit(1)
 
-    all_issues = []
-    for f in files:
-        if is_soul_file(f) and args.mode in ("soul", "all"):
-            all_issues.extend(scan_soul_file(f))
-        elif not is_soul_file(f) and args.mode in ("security", "quality", "all"):
-            all_issues.extend(scan_code_file(f, mode=args.mode))
+        all_issues = []
+        for f in files:
+            if is_soul_file(f) and args.mode in ("soul", "all"):
+                all_issues.extend(scan_soul_file(f))
+            elif not is_soul_file(f) and args.mode in ("security", "quality", "all"):
+                all_issues.extend(scan_code_file(f, mode=args.mode))
 
-    # Soul 模式额外扫描：Cron Job + Skill 触发词冲突
-    if args.mode in ("soul", "all"):
-        all_issues.extend(scan_cron_jobs(args.target))
-        all_issues.extend(scan_skill_trigger_conflicts(args.target))
+        # Soul 模式额外扫描：Cron Job + Skill 触发词冲突
+        if args.mode in ("soul", "all"):
+            all_issues.extend(scan_cron_jobs(args.target))
+            all_issues.extend(scan_skill_trigger_conflicts(args.target))
 
     # 终端报告
     print_report(all_issues, args.target)

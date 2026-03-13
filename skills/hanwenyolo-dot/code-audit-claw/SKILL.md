@@ -55,5 +55,6 @@ python3 scripts/audit_scanner.py <目标路径> --mode soul
 |------|------|
 | 审计整个 workspace | `--mode all ~/.openclaw/workspace` |
 | 只看灵魂文件 | `--mode soul ~/.openclaw/workspace` |
-| 审计某个 GEO 脚本 | `--mode security scripts/geo_analyzer.py` |
+| 审计某个脚本 | `--mode security scripts/analyzer.py` |
 | 审计所有 Skills | `--mode soul ~/.openclaw/workspace/skills` |
+| 系统安全检查 | `--mode system ~/.openclaw/workspace` |
