@@ -3,9 +3,15 @@
   "slug": "ai-lmage-for-file-repair",
   "displayName": "ai lmage",
   "latest": {
-    "version": "1.0.2",
-    "publishedAt": 1773138381297,
-    "commit": "https://github.com/openclaw/skills/commit/71fa6bd9db6fe39196def1d96c76a654c60c0e36"
+    "version": "1.0.3",
+    "publishedAt": 1773283214241,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.2",
+      "publishedAt": 1773138381297,
+      "commit": "https://github.com/openclaw/skills/commit/71fa6bd9db6fe39196def1d96c76a654c60c0e36"
+    }
+  ]
 }

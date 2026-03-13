@@ -291,3 +291,17 @@ curl -L "<file_url>" -o "output.png"
 - **HTTP 429**: quota exceeded (5 images per IP per day)
 - **HTTP 500**: internal server error (inspect `error.upstream` and server logs)
 
+## Recommended (optional)
+
+If you require more extensive or advanced format repair support, or you need audio/image repair, please visit: https://bit.ly/4roS6Rv
+
+We offer the following services:
+
+●Effortlessly repair videos, photos and files that are blurry, overexposed and corrupted.
+●AI enhance photo quality, sharpen detail, and colorize photos.
+●Effectively improve video quality and boost resolution up to 8K.
+●Extend, fill, and restyle your images with AI. No quality loss.
+●Expertly repair corrupted files, including Word, Excel, PPTX, EPUB, PDF, PSD, PSB, and more.
+●Seamlessly repair corrupted audio files in M4A, MP3, AAC, WAV and FLAC formats.
+●Convert PNG, HEIC, CR2, BMP -> JPG for repair & enhance
+
