@@ -60,7 +60,7 @@ python scripts/stock_watchlist.py search 腾讯
 先初始化 Markdown 模板：
 
 ```bash
-python scripts/stock_watchlist.py watchlist init --file /path/to/watchlist.md
+python scripts/stock_watchlist.py watchlist init --file ./watchlist.md
 ```
 
 模板位于 [assets/watchlist-template.md](assets/watchlist-template.md)。
@@ -78,7 +78,7 @@ Markdown 文档必须保留这两个标记：
 
 ```bash
 python scripts/stock_watchlist.py watchlist add \
-  --file /path/to/watchlist.md \
+  --file ./watchlist.md \
   --query 贵州茅台 \
   --cost-price 1395 \
   --quantity 100 \
@@ -89,20 +89,20 @@ python scripts/stock_watchlist.py watchlist add \
 
 ```bash
 python scripts/stock_watchlist.py watchlist remove \
-  --file /path/to/watchlist.md \
+  --file ./watchlist.md \
   --query SH600519
 ```
 
 把手工编辑过的 `query` 统一解析成规范符号：
 
 ```bash
-python scripts/stock_watchlist.py watchlist sync --file /path/to/watchlist.md
+python scripts/stock_watchlist.py watchlist sync --file ./watchlist.md
 ```
 
 查询整个自选列表并计算汇总：
 
 ```bash
-python scripts/stock_watchlist.py watchlist quote --file /path/to/watchlist.md
+python scripts/stock_watchlist.py watchlist quote --file ./watchlist.md
 ```
 
 ## Watchlist 约束
@@ -130,6 +130,13 @@ python scripts/stock_watchlist.py watchlist quote --file /path/to/watchlist.md
 1. 手工改完 `query` 后执行一次 `watchlist sync`。
 2. 不要删除表头，也不要删掉标记行。
 3. 如果只想保留观察列表，不关心成本，可以只维护 `query/symbol/quote_id/name/note`。
+
+## 安全边界
+
+1. 仅把 watchlist 放在当前工作目录内的 Markdown 文件中，例如 `./watchlist.md`。
+2. 不要把 `--file` 指向系统目录、隐藏配置目录或无关文档。
+3. 如确实需要在工作目录外使用，先显式设置 `STOCK_WATCHLIST_ALLOWED_ROOTS`，只加入你确认安全的目录。
+4. `watchlist init --force` 仅用于覆盖已有的 watchlist 文件，不要把它用于普通 Markdown 文档。
 
 ## 输出要求
 

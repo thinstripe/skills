@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Unit tests for the stock watchlist helper."""
 
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 import stock_watchlist
 
@@ -95,6 +97,48 @@ class StockWatchlistTests(unittest.TestCase):
         ]
         chosen = stock_watchlist.choose_candidate("腾讯", candidates)
         self.assertEqual(chosen["symbol"], "HK00700")
+
+    def test_resolve_watchlist_path_rejects_non_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("stock_watchlist.Path.cwd", return_value=Path(tmpdir)):
+                with self.assertRaises(stock_watchlist.StockWatchlistError):
+                    stock_watchlist.resolve_watchlist_path("./watchlist.txt")
+
+    def test_resolve_watchlist_path_rejects_outside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with tempfile.TemporaryDirectory() as otherdir:
+                with mock.patch("stock_watchlist.Path.cwd", return_value=Path(tmpdir)):
+                    with self.assertRaises(stock_watchlist.StockWatchlistError):
+                        stock_watchlist.resolve_watchlist_path(
+                            str(Path(otherdir) / "watchlist.md")
+                        )
+
+    def test_resolve_watchlist_path_allows_explicit_safe_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with tempfile.TemporaryDirectory() as otherdir:
+                with mock.patch("stock_watchlist.Path.cwd", return_value=Path(tmpdir)):
+                    with mock.patch.dict(
+                        os.environ,
+                        {
+                            stock_watchlist.WATCHLIST_ALLOWED_ROOTS_ENV: otherdir,
+                        },
+                        clear=False,
+                    ):
+                        resolved = stock_watchlist.resolve_watchlist_path(
+                            str(Path(otherdir) / "watchlist.md")
+                        )
+                        self.assertEqual(
+                            resolved, (Path(otherdir) / "watchlist.md").resolve()
+                        )
+
+    def test_force_init_rejects_non_watchlist_markdown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("stock_watchlist.Path.cwd", return_value=Path(tmpdir)):
+                target = Path(tmpdir) / "watchlist.md"
+                target.write_text("# Notes\n", encoding="utf-8")
+                args = type("Args", (), {"file": str(target), "force": True})()
+                with self.assertRaises(stock_watchlist.StockWatchlistError):
+                    stock_watchlist.command_watchlist_init(args)
 
 
 if __name__ == "__main__":

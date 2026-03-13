@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -24,6 +25,8 @@ REQUEST_HEADERS = {
 }
 WATCHLIST_START = "<!-- stock-watchlist:start -->"
 WATCHLIST_END = "<!-- stock-watchlist:end -->"
+WATCHLIST_EXTENSIONS = {".md", ".markdown"}
+WATCHLIST_ALLOWED_ROOTS_ENV = "STOCK_WATCHLIST_ALLOWED_ROOTS"
 WATCHLIST_COLUMNS = [
     "query",
     "symbol",
@@ -68,6 +71,49 @@ class ResolvedSecurity:
     quote_id: str
     market: str
     security_type: str
+
+
+def is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def is_watchlist_document(text: str) -> bool:
+    return WATCHLIST_START in text and WATCHLIST_END in text
+
+
+def allowed_watchlist_roots() -> list[Path]:
+    roots = [Path.cwd().resolve()]
+    raw_extra_roots = os.environ.get(WATCHLIST_ALLOWED_ROOTS_ENV, "")
+    for item in raw_extra_roots.split(os.pathsep):
+        stripped = item.strip()
+        if not stripped:
+            continue
+        roots.append(Path(stripped).expanduser().resolve())
+    unique_roots = []
+    for root in roots:
+        if root not in unique_roots:
+            unique_roots.append(root)
+    return unique_roots
+
+
+def resolve_watchlist_path(raw_path: str) -> Path:
+    candidate = Path(raw_path).expanduser().resolve()
+    if candidate.suffix.lower() not in WATCHLIST_EXTENSIONS:
+        raise StockWatchlistError(
+            "Watchlist file must use a Markdown extension: .md or .markdown."
+        )
+    if not any(is_relative_to(candidate, root) for root in allowed_watchlist_roots()):
+        allowed = ", ".join(str(root) for root in allowed_watchlist_roots())
+        raise StockWatchlistError(
+            "Watchlist path is outside allowed roots. "
+            f"Allowed roots: {allowed}. "
+            f"Use {WATCHLIST_ALLOWED_ROOTS_ENV} to add an explicit safe root."
+        )
+    return candidate
 
 
 def create_session() -> requests.Session:
@@ -523,11 +569,17 @@ def command_quote(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_watchlist_init(args: argparse.Namespace) -> dict[str, Any]:
-    target = Path(args.file).expanduser().resolve()
-    if target.exists() and not args.force:
-        raise StockWatchlistError(
-            f"Watchlist already exists: {target}. Use --force to overwrite it."
-        )
+    target = resolve_watchlist_path(args.file)
+    if target.exists():
+        if not args.force:
+            raise StockWatchlistError(
+                f"Watchlist already exists: {target}. Use --force to overwrite it."
+            )
+        existing_text = target.read_text(encoding="utf-8")
+        if not is_watchlist_document(existing_text):
+            raise StockWatchlistError(
+                "Refusing to overwrite a non-watchlist Markdown document."
+            )
     asset_path = Path(__file__).resolve().parents[1] / "assets" / "watchlist-template.md"
     content = asset_path.read_text(encoding="utf-8")
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -539,7 +591,7 @@ def command_watchlist_init(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_watchlist_show(args: argparse.Namespace) -> dict[str, Any]:
-    target = Path(args.file).expanduser().resolve()
+    target = resolve_watchlist_path(args.file)
     _, _, _, rows = load_watchlist(target)
     return {
         "command": "watchlist-show",
@@ -549,7 +601,7 @@ def command_watchlist_show(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_watchlist_sync(args: argparse.Namespace) -> dict[str, Any]:
-    target = Path(args.file).expanduser().resolve()
+    target = resolve_watchlist_path(args.file)
     prefix, _, suffix, rows = load_watchlist(target)
     synced_rows = []
     with create_session() as session:
@@ -578,7 +630,7 @@ def command_watchlist_sync(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_watchlist_add(args: argparse.Namespace) -> dict[str, Any]:
-    target = Path(args.file).expanduser().resolve()
+    target = resolve_watchlist_path(args.file)
     prefix, _, suffix, rows = load_watchlist(target)
     with create_session() as session:
         resolved = resolve_security(session, args.query)
@@ -608,7 +660,7 @@ def command_watchlist_add(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_watchlist_remove(args: argparse.Namespace) -> dict[str, Any]:
-    target = Path(args.file).expanduser().resolve()
+    target = resolve_watchlist_path(args.file)
     prefix, _, suffix, rows = load_watchlist(target)
     index = locate_entry(rows, args.query)
     if index is None:
@@ -623,7 +675,7 @@ def command_watchlist_remove(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def command_watchlist_quote(args: argparse.Namespace) -> dict[str, Any]:
-    target = Path(args.file).expanduser().resolve()
+    target = resolve_watchlist_path(args.file)
     _, _, _, rows = load_watchlist(target)
     results = []
     with create_session() as session:
