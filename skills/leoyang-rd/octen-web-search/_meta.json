@@ -3,9 +3,15 @@
   "slug": "octen-web-search",
   "displayName": "OctenWebSearch",
   "latest": {
-    "version": "1.0.0",
-    "publishedAt": 1773233678952,
-    "commit": "https://github.com/openclaw/skills/commit/84d8428dad89b4551b011562b1ff198d79a8ed81"
+    "version": "1.0.1",
+    "publishedAt": 1773419469808,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.0",
+      "publishedAt": 1773233678952,
+      "commit": "https://github.com/openclaw/skills/commit/84d8428dad89b4551b011562b1ff198d79a8ed81"
+    }
+  ]
 }
