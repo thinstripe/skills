@@ -1,11 +1,17 @@
 {
   "owner": "jblue-ops",
   "slug": "talentclaw",
-  "displayName": "Talentclaw",
+  "displayName": "Skills",
   "latest": {
-    "version": "2.0.0",
-    "publishedAt": 1773155289856,
-    "commit": "https://github.com/openclaw/skills/commit/4fbd9d2c951719fa7c0b5a8f6a238b9443ed2c86"
+    "version": "2.2.0",
+    "publishedAt": 1773328731133,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "2.0.0",
+      "publishedAt": 1773155289856,
+      "commit": "https://github.com/openclaw/skills/commit/4fbd9d2c951719fa7c0b5a8f6a238b9443ed2c86"
+    }
+  ]
 }
