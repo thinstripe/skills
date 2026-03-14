@@ -1,0 +1,11 @@
+{
+  "owner": "openlang-cn",
+  "slug": "docker-cli",
+  "displayName": "Docker Cli",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1773308676389,
+    "commit": null
+  },
+  "history": []
+}
