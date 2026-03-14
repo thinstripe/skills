@@ -15,21 +15,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const CACHE_DIR = join(__dirname, "..", ".cache");
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
-// Load .env from skill root (no dotenv dependency)
-try {
-  const envPath = join(__dirname, "..", ".env");
-  const envContent = readFileSync(envPath, "utf-8");
-  for (const line of envContent.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim();
-    if (!process.env[key]) process.env[key] = val;
-  }
-} catch {}
-
 // ── Contracts (BSC Mainnet) ──────────────────────────────────────────────────
 
 export const CHAIN_ID = 56;
@@ -144,6 +129,12 @@ export const POOL_ABI = [
     type: "function",
   },
 ];
+
+// ── ERC20 ABIs ──────────────────────────────────────────────────────────────
+
+export const ERC20_BALANCE = [{ inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }];
+export const ERC20_ALLOWANCE = [{ inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], name: "allowance", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }];
+export const ERC20_APPROVE = [{ inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }], name: "approve", outputs: [{ name: "", type: "bool" }], stateMutability: "nonpayable", type: "function" }];
 
 // ── BSC client ───────────────────────────────────────────────────────────────
 

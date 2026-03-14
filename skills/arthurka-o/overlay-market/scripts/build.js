@@ -7,10 +7,7 @@
 // Usage: node build.js <market> <long|short> <collateral> <leverage> [--slippage <pct>] [--dry-run]
 
 import { encodeFunctionData, parseEther, formatUnits } from "viem";
-import { CONTRACTS, CHAIN_ID, USDT_TOKEN, SHIVA_ABI, resolveMarket, fetchMidPrice, fetchOvlPrice, calcPriceLimit, publicClient, getAccount, bigIntToNumber } from "./common.js";
-
-const ERC20_BALANCE = [{ inputs: [{ name: "", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }];
-const ERC20_ALLOWANCE = [{ inputs: [{ name: "", type: "address" }, { name: "", type: "address" }], name: "allowance", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }];
+import { CONTRACTS, CHAIN_ID, USDT_TOKEN, SHIVA_ABI, ERC20_BALANCE, ERC20_ALLOWANCE, resolveMarket, fetchMidPrice, fetchOvlPrice, calcPriceLimit, publicClient, getAccount, bigIntToNumber } from "./common.js";
 
 const positional = [];
 let slippage;
@@ -128,6 +125,7 @@ if (dryRun) {
   }
   if (allowanceNum < col) {
     console.error(`\n✗ Insufficient USDT allowance: need ${collateral}, approved ${allowanceNum.toFixed(2)}`);
+    console.error(`Run: node scripts/approve.js | node scripts/send.js`);
     process.exit(1);
   }
 

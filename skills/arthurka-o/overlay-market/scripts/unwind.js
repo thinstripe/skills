@@ -11,6 +11,7 @@ import { encodeFunctionData, parseEther, decodeFunctionData } from "viem";
 import { CONTRACTS, CHAIN_ID, OVL_TOKEN, USDT_TOKEN, SHIVA_ABI, STATE_ABI, SUBGRAPH_URL, resolveMarket, fetchMidPrice, fetchOvlPrice, calcPriceLimit, fetchWithTimeout, publicClient, getAccount, bigIntToNumber } from "./common.js";
 
 const ONEINCH_PROXY = "https://1inch-proxy.overlay-market-account.workers.dev";
+const ONEINCH_API = "https://api.1inch.dev";
 const SWAP_SLIPPAGE = 1; // 1% slippage for OVL→USDT swap
 
 // 1inch v6 AggregationRouterV6.swap ABI (just enough to decode)
@@ -47,8 +48,13 @@ async function fetchSwapData(ovlAmount, swapSlippage = SWAP_SLIPPAGE) {
     slippage: String(swapSlippage),
   });
 
-  const url = `${ONEINCH_PROXY}/swap/v6.1/56/swap?${params}`;
-  const res = await fetchWithTimeout(url, { headers: { Origin: "https://app.overlay.market" } });
+  const apiKey = process.env.ONEINCH_API_KEY;
+  const base = apiKey ? ONEINCH_API : ONEINCH_PROXY;
+  const url = `${base}/swap/v6.1/56/swap?${params}`;
+  const headers = apiKey
+    ? { Authorization: `Bearer ${apiKey}` }
+    : { Origin: "https://app.overlay.market" };
+  const res = await fetchWithTimeout(url, { headers });
   const json = await res.json();
 
   // Decode minReturnAmount from the swap calldata

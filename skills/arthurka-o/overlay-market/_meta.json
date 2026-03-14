@@ -3,9 +3,15 @@
   "slug": "overlay-market",
   "displayName": "Overlay Market (perpetual futures trading)",
   "latest": {
-    "version": "0.1.1",
-    "publishedAt": 1773262599657,
-    "commit": "https://github.com/openclaw/skills/commit/0a7724b799c80da2d30f67193deea4885d5c57b4"
+    "version": "0.1.6",
+    "publishedAt": 1773323902925,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "0.1.1",
+      "publishedAt": 1773262599657,
+      "commit": "https://github.com/openclaw/skills/commit/0a7724b799c80da2d30f67193deea4885d5c57b4"
+    }
+  ]
 }

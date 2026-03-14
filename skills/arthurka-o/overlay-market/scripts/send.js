@@ -10,7 +10,7 @@
 //
 // Requires: OVERLAY_PRIVATE_KEY environment variable (with or without 0x prefix)
 
-import { CONTRACTS, CHAIN_ID, getAccount, getWalletClient, publicClient } from "./common.js";
+import { CONTRACTS, CHAIN_ID, USDT_TOKEN, getAccount, getWalletClient, publicClient } from "./common.js";
 
 const account = getAccount();
 if (!account) {
@@ -39,11 +39,20 @@ if (tx.chainId && tx.chainId !== CHAIN_ID) {
   process.exit(1);
 }
 
-const ALLOWED_TARGETS = new Set([CONTRACTS.SHIVA.toLowerCase()]);
+const ALLOWED_TARGETS = new Set([CONTRACTS.SHIVA.toLowerCase(), USDT_TOKEN.toLowerCase()]);
 if (!tx.to || !ALLOWED_TARGETS.has(tx.to.toLowerCase())) {
   console.error(`Error: unexpected target address ${tx.to}`);
   console.error(`Allowed: ${[...ALLOWED_TARGETS].join(", ")}`);
   process.exit(1);
+}
+
+// Only approve() is allowed on the USDT token — block transfer/transferFrom/etc.
+if (tx.to.toLowerCase() === USDT_TOKEN.toLowerCase()) {
+  const selector = tx.data?.slice(0, 10);
+  if (selector !== "0x095ea7b3") { // approve(address,uint256)
+    console.error(`Error: only approve() calls are allowed on USDT. Got selector: ${selector}`);
+    process.exit(1);
+  }
 }
 
 const client = getWalletClient();

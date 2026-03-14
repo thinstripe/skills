@@ -8,9 +8,7 @@
 //   node balance.js              (derives address from OVERLAY_PRIVATE_KEY)
 
 import { formatUnits, formatEther } from "viem";
-import { USDT_TOKEN, publicClient, getAccount } from "./common.js";
-
-const ERC20_BALANCE = [{ inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }];
+import { USDT_TOKEN, ERC20_BALANCE, publicClient, getAccount } from "./common.js";
 
 const arg = process.argv[2];
 let address;
