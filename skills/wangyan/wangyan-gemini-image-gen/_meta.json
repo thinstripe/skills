@@ -1,0 +1,11 @@
+{
+  "owner": "wangyan",
+  "slug": "wangyan-gemini-image-gen",
+  "displayName": "Gemini Image Generator",
+  "latest": {
+    "version": "1.0.1",
+    "publishedAt": 1773466789551,
+    "commit": null
+  },
+  "history": []
+}
