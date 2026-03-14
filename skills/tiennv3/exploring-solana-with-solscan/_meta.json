@@ -3,9 +3,15 @@
   "slug": "exploring-solana-with-solscan",
   "displayName": "exploring-solana-with-solscan",
   "latest": {
-    "version": "1.0.6",
-    "publishedAt": 1773303290222,
-    "commit": "https://github.com/openclaw/skills/commit/aaf0708acb11383d6e09104351ef4a030c9d0890"
+    "version": "1.0.7",
+    "publishedAt": 1773303522597,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.6",
+      "publishedAt": 1773303290222,
+      "commit": "https://github.com/openclaw/skills/commit/aaf0708acb11383d6e09104351ef4a030c9d0890"
+    }
+  ]
 }

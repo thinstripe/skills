@@ -25,7 +25,10 @@ def make_request(endpoint, params=None):
         params = {k: v for k, v in params.items() if v is not None}
         
     try:
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(url, headers={
+                                                "token": api_key,
+                                                "User-Agent": "Agent-Skill/1.0"
+                                            }, params=params)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
