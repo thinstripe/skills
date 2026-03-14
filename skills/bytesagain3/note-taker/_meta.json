@@ -1,11 +1,17 @@
 {
   "owner": "bytesagain3",
   "slug": "note-taker",
-  "displayName": "note-taker",
+  "displayName": "Note Taker",
   "latest": {
-    "version": "1.0.0",
-    "publishedAt": 1773242296658,
-    "commit": "https://github.com/openclaw/skills/commit/48cc436a1c8b6f45d95d5b8efe6a1a5fbb3a4ac9"
+    "version": "2.2.0",
+    "publishedAt": 1773444862432,
+    "commit": null
   },
-  "history": []
+  "history": [
+    {
+      "version": "1.0.0",
+      "publishedAt": 1773242296658,
+      "commit": "https://github.com/openclaw/skills/commit/48cc436a1c8b6f45d95d5b8efe6a1a5fbb3a4ac9"
+    }
+  ]
 }
