@@ -1,0 +1,11 @@
+{
+  "owner": "flyswimmer",
+  "slug": "mytest",
+  "displayName": "mytest1111111",
+  "latest": {
+    "version": "1.0.0",
+    "publishedAt": 1773378044170,
+    "commit": null
+  },
+  "history": []
+}
