@@ -1,0 +1,11 @@
+{
+  "owner": "happytreees",
+  "slug": "vultr",
+  "displayName": "Vultr Cloud Infrastructure",
+  "latest": {
+    "version": "1.0.1",
+    "publishedAt": 1773355441825,
+    "commit": null
+  },
+  "history": []
+}
