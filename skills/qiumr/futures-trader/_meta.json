@@ -1,0 +1,11 @@
+{
+  "owner": "qiumr",
+  "slug": "futures-trader",
+  "displayName": "Gate.io 期货交易 CLI 工具",
+  "latest": {
+    "version": "1.0.2",
+    "publishedAt": 1773425242919,
+    "commit": null
+  },
+  "history": []
+}
